@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/safe-shutdown",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Ensures M5/M9 before program end and a final M30 when missing",
+  "usermod": { "name": "safe-shutdown", "postprocessor": "dist/index.js", "order": 30, "description": "Ensures M5/M9 before program end and a final M30 when missing" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

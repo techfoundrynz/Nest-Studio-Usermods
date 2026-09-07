@@ -1,0 +1,19 @@
+{
+  "name": "@neststudio-usermods/installer",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Interactive installer: rebuilds Nest Studio's app.asar with the user-mod loader, manages mod selection",
+  "main": "src/install.ts",
+  "scripts": {
+    "start": "tsx src/install.ts",
+    "build": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@neststudio-usermods/asar": "workspace:*",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/prompts": "^2.4.9"
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "disabled": [],
+  "disabled": ["strip-comments", "line-numbers"],
   "settings": {
     "program-header": { "label": "Nest Studio usermod", "includeStats": true },
     "safe-shutdown": { "spindleOff": true, "coolantOff": true, "programEnd": true },

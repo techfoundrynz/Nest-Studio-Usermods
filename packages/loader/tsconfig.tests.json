@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "lib": ["ES2022"],
+    "types": ["node", "@neststudio-usermods/types"],
+    "rootDir": "tests",
+    "outDir": "dist/tests"
+  },
+  "include": ["tests/**/*.ts"]
+}

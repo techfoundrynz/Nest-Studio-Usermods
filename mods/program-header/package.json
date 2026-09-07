@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/program-header",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Adds file name, date, tools, feed/spindle and bounds as comments after the app header",
+  "usermod": { "name": "program-header", "postprocessor": "dist/index.js", "order": 20, "description": "Adds file name, date, tools, feed/spindle and bounds as comments after the app header" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

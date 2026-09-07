@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/feed-override",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Scales/clamps F and S words (no-op at factor 1 with no limits)",
+  "usermod": { "name": "feed-override", "postprocessor": "dist/index.js", "order": 10, "description": "Scales/clamps F and S words (no-op at factor 1 with no limits)" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

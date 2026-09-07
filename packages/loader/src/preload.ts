@@ -1,0 +1,60 @@
+// ==== NEST-USERMOD-PRELOAD-BEGIN ====
+// Everything from this marker to the end of the compiled file is appended to the app's
+// out/preload/index.js by tools/install.ps1 (which adds the END marker). Runs inside Electron's
+// sandboxed preload, so only require("electron") is available. Exposes window.usermod and injects
+// the UI runtime plus every mod in dist/ui.
+(function usermodPreload(): void {
+  try {
+    const { contextBridge, ipcRenderer } = require("electron");
+    const invoke = <T = unknown>(channel: string, ...args: unknown[]): Promise<Usermod.IpcResult<T>> =>
+      ipcRenderer.invoke("usermod:" + channel, ...args) as Promise<Usermod.IpcResult<T>>;
+    const bridge: Usermod.Bridge = {
+      invoke,
+      on: <T = unknown>(channel: string, callback: (payload: T) => void) => {
+        const handler = (_event: unknown, payload: unknown): void => callback(payload as T);
+        ipcRenderer.on("usermod:" + channel, handler);
+        return () => ipcRenderer.removeListener("usermod:" + channel, handler);
+      },
+      info: () => invoke<Usermod.Info>("info"),
+      listUiMods: () => invoke<Usermod.UiModEntry[]>("list-ui-mods"),
+      readFile: (relPath) => invoke<string>("read-file", relPath),
+      writeFile: (relPath, text) => invoke<string>("write-file", relPath, text),
+      log: (level, ...values) => invoke<void>("log", level, ...values),
+      reload: () => invoke<Usermod.Info>("reload"),
+      openModDir: () => invoke<string>("open-mod-dir"),
+      runPostprocessors: (stage, gcode, ctx) => invoke<string>("run-postprocessors", stage, gcode, ctx)
+    };
+    if (process.contextIsolated) {
+      contextBridge.exposeInMainWorld("usermod", bridge);
+    } else {
+      (window as unknown as { usermod: Usermod.Bridge }).usermod = bridge;
+    }
+
+    const loadScript = (mod: Usermod.UiModEntry): Promise<boolean> =>
+      new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = mod.url;
+        script.dataset.usermod = mod.name;
+        script.onload = () => resolve(true);
+        script.onerror = () => {
+          void invoke("log", "error", "failed to load ui mod " + mod.name + " from " + mod.url);
+          resolve(false);
+        };
+        (document.head || document.documentElement).appendChild(script);
+      });
+    const injectUiMods = async (): Promise<void> => {
+      const result = await invoke<Usermod.UiModEntry[]>("list-ui-mods");
+      if (!result.ok) return;
+      for (const mod of result.data) {
+        await loadScript(mod);
+      }
+    };
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", () => void injectUiMods());
+    } else {
+      void injectUiMods();
+    }
+  } catch (error) {
+    console.error("[usermod] preload bridge failed", error);
+  }
+})();

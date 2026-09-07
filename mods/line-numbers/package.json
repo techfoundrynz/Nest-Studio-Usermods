@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/line-numbers",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Adds N line numbers to code lines",
+  "usermod": { "name": "line-numbers", "postprocessor": "dist/index.js", "order": 50, "description": "Adds N line numbers to code lines" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

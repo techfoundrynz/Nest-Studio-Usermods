@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/gcode-lab",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Inspect, validate, time-estimate and post-process any G-code file",
+  "usermod": { "name": "gcode-lab", "ui": "dist/index.js", "order": 30, "description": "Inspect, validate, time-estimate and post-process any G-code file" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

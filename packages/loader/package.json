@@ -1,0 +1,16 @@
+{
+  "name": "@neststudio-usermods/loader",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Nest Studio user-mod loader: main-process hook, preload bridge and renderer UI runtime",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.tests.json",
+    "watch": "concurrently -n main,renderer \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.renderer.json -w --preserveWatchOutput\"",
+    "test": "node dist/tests/harness.js"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*"
+  }
+}

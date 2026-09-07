@@ -33,9 +33,9 @@ The CAM service is a Nuitka-compiled Flask app served by waitress. Its Python is
 
 Electron resolves the app in this order for this build: `resources\app.asar`, then
 `resources\default_app.asar`. A plain `resources\app` folder is ignored (tested), so the only way to
-change shipped JS is to rewrite `app.asar`. `tools/asar-tool.js` does that without dependencies by
-reusing the original header: file layout, `unpacked` flags and `app.asar.unpacked` stay identical, only
-the three patched files change size/offset. Fuse `EnableEmbeddedAsarIntegrityValidation` is off, so the
+change shipped JS is to rewrite `app.asar`. `packages/asar` does that without dependencies by reusing
+the original header: file layout, `unpacked` flags and `app.asar.unpacked` stay identical, only the
+three patched files change size/offset. Fuse `EnableEmbeddedAsarIntegrityValidation` is off, so the
 dropped integrity blocks are not checked. The Windows executable's Authenticode signature does not
 cover the asar.
 
@@ -50,6 +50,19 @@ The renderer writes exports through `window.api.store.writeFile(dialogPath, gcod
 path sandbox only allows user data, temp, downloads and dialog-picked paths. Internal scratch files
 under user data are skipped by the loader unless a post-processor sets `includeInternal`.
 
+## Repository layout and build
+
+pnpm workspace: `packages/*` (types, loader, asar, installer) and `mods/*` (one package per mod, each
+with a `usermod` manifest in `package.json`). Everything is TypeScript compiled with plain `tsc`:
+
+- main-process code -> CommonJS (`module: CommonJS`), Node + Electron types
+- renderer code -> classic scripts (`module: None`, one IIFE per file), DOM types; shared types are
+  ambient declarations so they work without imports
+
+The installer (`packages/installer`, run with `tsx`) builds the workspace, patches three files in the
+extracted archive, repacks, and injects `require("<repo>/packages/loader/dist/main.js")` as the first
+statement of the app's main script. Mods therefore load straight from the repo at runtime.
+
 ## Renderer anchors
 
 The app bar (`AppBar` in `FullApp-*.js`) exposes stable test ids:
@@ -62,4 +75,4 @@ inside 36 px buttons.
 
 `electron-updater` with a generic provider downloads a full NSIS installer, which removes the whole
 install directory before installing. Anything under `Program Files` is lost on update; this repo lives
-elsewhere and `tools/install.ps1` re-applies the patch to the new `app.asar` in a few seconds.
+elsewhere and `pnpm run install:app` re-applies the patch to the new `app.asar` in a few seconds.

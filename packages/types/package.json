@@ -1,0 +1,9 @@
+{
+  "name": "@neststudio-usermods/types",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Ambient TypeScript declarations for Nest Studio user mods (main-process and renderer)",
+  "types": "index.d.ts",
+  "files": ["*.d.ts"]
+}

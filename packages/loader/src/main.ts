@@ -1,0 +1,434 @@
+/*
+ * Nest Studio user-mod loader (main process).
+ * Injected as the first statement of out/main/index.js by the installer.
+ * Discovers mods from <repo>/mods/<pkg>/package.json "usermod" manifests, honours mods.json, hooks the
+ * app's G-code IPC channels for post-processors and exposes the usermod:* IPC surface.
+ * Everything here is wrapped so a broken mod can never stop the app from starting.
+ */
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { pathToFileURL } from "node:url";
+// Plain require so the very same module object the app uses is patched and handed to mods.
+import electron = require("electron");
+
+const LOADER_VERSION = "0.3.0";
+const { app, ipcMain, shell, BrowserWindow } = electron;
+
+/** packages/loader/dist -> repo root. */
+const ROOT_DIR = path.resolve(__dirname, "..", "..", "..");
+const MODS_DIR = path.join(ROOT_DIR, "mods");
+const DATA_DIR = path.join(ROOT_DIR, "data");
+const LOG_FILE = path.join(ROOT_DIR, "usermod.log");
+const CONFIG_FILE = path.join(ROOT_DIR, "mods.json");
+const GCODE_EXT = /\.(nc|gcode|tap|ngc|cnc)$/i;
+
+interface Manifest {
+  name: string;
+  dir: string;
+  description: string;
+  order: number;
+  postprocessor?: string;
+  ui?: string;
+  main?: string;
+}
+interface LoadedPostprocessor {
+  name: string;
+  file: string;
+  description: string;
+  stages: Usermod.Stage[];
+  includeInternal: boolean;
+  match: ((ctx: Usermod.PostprocessorContext) => boolean) | null;
+  process: Usermod.Postprocessor["process"];
+}
+interface LoaderState {
+  config: Usermod.Config;
+  manifests: Manifest[];
+  postprocessors: LoadedPostprocessor[];
+  mainMods: Usermod.MainModSummary[];
+  errors: Usermod.LoaderError[];
+}
+const state: LoaderState = {
+  config: { disabled: [], settings: {} },
+  manifests: [],
+  postprocessors: [],
+  mainMods: [],
+  errors: []
+};
+
+/* ---------------------------------------------------------------- logging */
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+function formatValue(value: unknown): string {
+  if (value instanceof Error) return `${value.message}\n${value.stack ?? ""}`;
+  return typeof value === "string" ? value : safeJson(value);
+}
+function log(level: Usermod.LogLevel, ...values: unknown[]): void {
+  const line = `[${new Date().toISOString()}] [${level}] ${values.map(formatValue).join(" ")}\n`;
+  try {
+    try {
+      if (fs.statSync(LOG_FILE).size > 2 * 1024 * 1024) fs.renameSync(LOG_FILE, `${LOG_FILE}.1`);
+    } catch {
+      /* no log file yet */
+    }
+    fs.appendFileSync(LOG_FILE, line, "utf8");
+  } catch {
+    /* ignore logging failures */
+  }
+  const method = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+  method("[usermod]", ...values);
+}
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+function recordError(scope: string, error: unknown): void {
+  state.errors.push({ scope, message: errorMessage(error), time: Date.now() });
+  if (state.errors.length > 50) state.errors.shift();
+  log("error", `${scope}:`, error);
+}
+
+/* ----------------------------------------------------------------- config */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function loadConfig(): Usermod.Config {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const parsed: unknown = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
+      const disabled = isRecord(parsed) && Array.isArray(parsed.disabled) ? parsed.disabled.filter((d): d is string => typeof d === "string") : [];
+      const settings: Usermod.Config["settings"] = {};
+      if (isRecord(parsed) && isRecord(parsed.settings)) {
+        for (const [key, value] of Object.entries(parsed.settings)) {
+          if (isRecord(value)) settings[key] = value;
+        }
+      }
+      state.config = { disabled, settings };
+    }
+  } catch (error) {
+    recordError("config", error);
+  }
+  return state.config;
+}
+function settingsFor(name: string): Record<string, unknown> {
+  return state.config.settings[name] ?? {};
+}
+
+/* -------------------------------------------------------------- manifests */
+function readManifest(dir: string): Manifest | null {
+  const pkgFile = path.join(dir, "package.json");
+  if (!fs.existsSync(pkgFile)) return null;
+  const pkg: unknown = JSON.parse(fs.readFileSync(pkgFile, "utf8"));
+  if (!isRecord(pkg) || !isRecord(pkg.usermod)) return null;
+  const m = pkg.usermod;
+  const fallbackName = typeof pkg.name === "string" ? pkg.name.replace(/^@[^/]+\//, "") : path.basename(dir);
+  const entry = (key: string): string | undefined => (typeof m[key] === "string" ? path.resolve(dir, m[key] as string) : undefined);
+  return {
+    name: typeof m.name === "string" && m.name ? m.name : fallbackName,
+    dir,
+    description: typeof m.description === "string" ? m.description : typeof pkg.description === "string" ? pkg.description : "",
+    order: typeof m.order === "number" ? m.order : 100,
+    ...(entry("postprocessor") ? { postprocessor: entry("postprocessor") } : {}),
+    ...(entry("ui") ? { ui: entry("ui") } : {}),
+    ...(entry("main") ? { main: entry("main") } : {})
+  };
+}
+function discoverManifests(): Manifest[] {
+  const found: Manifest[] = [];
+  try {
+    if (!fs.existsSync(MODS_DIR)) return found;
+    for (const name of fs.readdirSync(MODS_DIR)) {
+      const dir = path.join(MODS_DIR, name);
+      try {
+        if (!fs.statSync(dir).isDirectory()) continue;
+        const manifest = readManifest(dir);
+        if (manifest) found.push(manifest);
+      } catch (error) {
+        recordError(`manifest:${name}`, error);
+      }
+    }
+  } catch (error) {
+    recordError("discover", error);
+  }
+  found.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "en"));
+  state.manifests = found;
+  return found;
+}
+function enabledManifests(): Manifest[] {
+  return state.manifests.filter((m) => !state.config.disabled.includes(m.name));
+}
+function freshRequire(file: string): unknown {
+  delete require.cache[require.resolve(file)];
+  return require(file) as unknown;
+}
+
+/* --------------------------------------------------------- postprocessors */
+function isPostprocessor(value: unknown): value is Usermod.Postprocessor {
+  return isRecord(value) && typeof value.process === "function";
+}
+function isStage(value: unknown): value is Usermod.Stage {
+  return value === "export" || value === "send";
+}
+function loadPostprocessors(): LoadedPostprocessor[] {
+  const loaded: LoadedPostprocessor[] = [];
+  for (const manifest of enabledManifests()) {
+    if (!manifest.postprocessor) continue;
+    try {
+      if (!fs.existsSync(manifest.postprocessor)) throw new Error(`not built: ${manifest.postprocessor}`);
+      const mod = freshRequire(manifest.postprocessor);
+      const def: unknown = typeof mod === "function" ? { process: mod } : mod;
+      if (!isPostprocessor(def)) throw new Error("postprocessor must export an object with a process(gcode, ctx) function");
+      const stages = Array.isArray(def.stages) ? def.stages.filter(isStage) : [];
+      loaded.push({
+        name: manifest.name,
+        file: manifest.postprocessor,
+        description: manifest.description || (typeof def.description === "string" ? def.description : ""),
+        stages: stages.length ? stages : ["export"],
+        includeInternal: Boolean(def.includeInternal),
+        match: typeof def.match === "function" ? def.match.bind(def) : null,
+        process: def.process.bind(def)
+      });
+    } catch (error) {
+      recordError(`postprocessor:${manifest.name}`, error);
+    }
+  }
+  state.postprocessors = loaded;
+  log("info", `loaded ${loaded.length} postprocessor(s):`, loaded.map((p) => `${p.name}[${p.stages.join(",")}]`).join(", ") || "(none)");
+  return loaded;
+}
+function isInternalPath(filePath: string): boolean {
+  try {
+    const userData = app.getPath("userData").toLowerCase();
+    return path.resolve(filePath).toLowerCase().startsWith(userData);
+  } catch {
+    return false;
+  }
+}
+async function runPostprocessors(stage: Usermod.Stage, gcode: string, ctx: Usermod.RunContextInput & { internal?: boolean } = {}): Promise<string> {
+  if (typeof gcode !== "string") return gcode;
+  let current = gcode;
+  const applied: string[] = [];
+  for (const pp of state.postprocessors) {
+    if (!pp.stages.includes(stage)) continue;
+    if (ctx.internal && !pp.includeInternal) continue;
+    const fullCtx: Usermod.PostprocessorContext = {
+      ...ctx,
+      stage,
+      internal: Boolean(ctx.internal),
+      settings: settingsFor(pp.name),
+      dataDir: DATA_DIR,
+      log: (...values) => log("info", `[${pp.name}]`, ...values),
+      warn: (...values) => log("warn", `[${pp.name}]`, ...values)
+    };
+    try {
+      if (pp.match && !pp.match(fullCtx)) continue;
+      const result = await pp.process(current, fullCtx);
+      if (typeof result === "string") {
+        current = result;
+        applied.push(pp.name);
+      } else if (result !== undefined && result !== null) {
+        log("warn", `postprocessor ${pp.name} returned a non-string; ignoring its output`);
+      }
+    } catch (error) {
+      recordError(`postprocessor-run:${pp.name}`, error);
+    }
+  }
+  if (applied.length) {
+    log("info", `stage=${stage} applied [${applied.join(" -> ")}] target=${ctx.filePath ?? ctx.fileName ?? "?"} bytes=${gcode.length}->${current.length}`);
+  }
+  return current;
+}
+
+/* ---------------------------------------------------- ipc handler hooking */
+type IpcListener = Parameters<typeof ipcMain.handle>[1];
+const originalHandle = ipcMain.handle.bind(ipcMain);
+
+function wrapHandler(channel: string, listener: IpcListener): IpcListener {
+  if (channel === "store:write-file") {
+    return async (event, filePath: unknown, data: unknown) => {
+      try {
+        if (typeof data === "string" && typeof filePath === "string" && GCODE_EXT.test(filePath)) {
+          data = await runPostprocessors("export", data, {
+            filePath,
+            fileName: path.basename(filePath),
+            internal: isInternalPath(filePath)
+          });
+        }
+      } catch (error) {
+        recordError("hook:store:write-file", error);
+      }
+      return listener(event, filePath, data);
+    };
+  }
+  if (channel === "device:send-gcode" || channel === "device:sync-gcode-to-small-screen") {
+    return async (event, options: unknown) => {
+      try {
+        if (isRecord(options) && typeof options.gcode === "string") {
+          const gcode = await runPostprocessors("send", options.gcode, {
+            fileName: typeof options.fileName === "string" ? options.fileName : undefined,
+            channel,
+            internal: false
+          });
+          options = { ...options, gcode };
+        }
+      } catch (error) {
+        recordError(`hook:${channel}`, error);
+      }
+      return listener(event, options);
+    };
+  }
+  return listener;
+}
+ipcMain.handle = (channel, listener) => originalHandle(channel, wrapHandler(channel, listener));
+
+/* -------------------------------------------------------------- main mods */
+function getMainWindow(): electron.BrowserWindow | null {
+  const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+  return windows.find((w) => w.webContents.getURL().includes("renderer/index.html")) ?? windows[0] ?? null;
+}
+function wrapIpcResult(scope: string, fn: Usermod.IpcHandler): IpcListener {
+  return async (_event, ...args: unknown[]): Promise<Usermod.IpcResult<unknown>> => {
+    try {
+      return { ok: true, data: await fn(...args) };
+    } catch (error) {
+      recordError(scope, error);
+      return { ok: false, message: errorMessage(error) };
+    }
+  };
+}
+function createModApi(name: string): Usermod.MainModApi {
+  return {
+    name,
+    electron,
+    app,
+    modDir: ROOT_DIR,
+    distDir: MODS_DIR,
+    dataDir: DATA_DIR,
+    settings: settingsFor(name),
+    whenReady: () => app.whenReady(),
+    log: (...values) => log("info", `[${name}]`, ...values),
+    warn: (...values) => log("warn", `[${name}]`, ...values),
+    error: (...values) => log("error", `[${name}]`, ...values),
+    handle: (channel, fn) => {
+      const full = `usermod:${channel}`;
+      ipcMain.removeHandler(full);
+      originalHandle(full, wrapIpcResult(`mod-ipc:${name}:${channel}`, fn));
+    },
+    send: (channel, payload) => {
+      getMainWindow()?.webContents.send(`usermod:${channel}`, payload);
+    },
+    getMainWindow,
+    readStore: () => JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "store.json"), "utf8")) as NestStudio.Store,
+    runPostprocessors
+  };
+}
+function isMainMod(value: unknown): value is Usermod.MainMod {
+  return isRecord(value) && typeof value.activate === "function";
+}
+function loadMainMods(): void {
+  for (const manifest of enabledManifests()) {
+    if (!manifest.main) continue;
+    try {
+      if (!fs.existsSync(manifest.main)) throw new Error(`not built: ${manifest.main}`);
+      const mod = freshRequire(manifest.main);
+      const def: unknown = typeof mod === "function" ? { activate: mod } : mod;
+      if (!isMainMod(def)) throw new Error("main mod must export { activate(api) } or a function");
+      const api = createModApi(manifest.name);
+      Promise.resolve(def.activate(api)).catch((error: unknown) => recordError(`main-mod-activate:${manifest.name}`, error));
+      state.mainMods.push({ name: manifest.name, file: manifest.main, description: manifest.description || (typeof def.description === "string" ? def.description : "") });
+    } catch (error) {
+      recordError(`main-mod:${manifest.name}`, error);
+    }
+  }
+  log("info", `activated ${state.mainMods.length} main mod(s):`, state.mainMods.map((m) => m.name).join(", ") || "(none)");
+}
+
+/* ----------------------------------------------------------- ui mod list */
+function listUiMods(): Usermod.UiModEntry[] {
+  const runtime = path.join(__dirname, "ui-runtime.js");
+  const entries: Usermod.UiModEntry[] = [{ name: "ui-runtime", file: runtime, url: pathToFileURL(runtime).href }];
+  for (const manifest of enabledManifests()) {
+    if (!manifest.ui) continue;
+    if (!fs.existsSync(manifest.ui)) {
+      recordError(`ui:${manifest.name}`, new Error(`not built: ${manifest.ui}`));
+      continue;
+    }
+    entries.push({ name: manifest.name, file: manifest.ui, url: pathToFileURL(manifest.ui).href });
+  }
+  return entries;
+}
+
+/* --------------------------------------------------- loader ipc endpoints */
+function resolveInside(relPath: unknown, root: string): string {
+  if (typeof relPath !== "string" || relPath.includes("\0")) throw new Error("invalid path");
+  const resolved = path.resolve(root, relPath);
+  const rootNorm = path.resolve(root).toLowerCase();
+  const resolvedNorm = resolved.toLowerCase();
+  if (!(resolvedNorm === rootNorm || resolvedNorm.startsWith(rootNorm + path.sep))) {
+    throw new Error("path escapes the mod directory");
+  }
+  return resolved;
+}
+function getInfo(): Usermod.Info {
+  return {
+    loaderVersion: LOADER_VERSION,
+    modDir: ROOT_DIR,
+    distDir: MODS_DIR,
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron ?? "",
+    config: state.config,
+    postprocessors: state.postprocessors.map((p) => ({ name: p.name, file: p.file, stages: p.stages, description: p.description })),
+    mainMods: state.mainMods,
+    uiMods: listUiMods().slice(1),
+    errors: state.errors
+  };
+}
+function registerLoaderIpc(): void {
+  const define = (channel: string, fn: Usermod.IpcHandler): void => {
+    ipcMain.removeHandler(`usermod:${channel}`);
+    originalHandle(`usermod:${channel}`, wrapIpcResult(`ipc:${channel}`, fn));
+  };
+  define("info", () => getInfo());
+  define("list-ui-mods", () => listUiMods());
+  define("read-file", (relPath: unknown) => fs.readFileSync(resolveInside(relPath, ROOT_DIR), "utf8"));
+  define("write-file", (relPath: unknown, text: unknown) => {
+    const target = resolveInside(relPath, DATA_DIR);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, String(text), "utf8");
+    return target;
+  });
+  define("log", (level: unknown, ...values: unknown[]) => {
+    const lvl: Usermod.LogLevel = level === "warn" || level === "error" ? level : "info";
+    log(lvl, "[renderer]", ...values);
+  });
+  define("reload", () => {
+    loadConfig();
+    discoverManifests();
+    loadPostprocessors();
+    return getInfo();
+  });
+  define("open-mod-dir", () => shell.openPath(ROOT_DIR));
+  define("run-postprocessors", (stage: unknown, gcode: unknown, ctx: unknown) => {
+    if (typeof gcode !== "string") throw new Error("gcode must be a string");
+    const input: Usermod.RunContextInput = isRecord(ctx) ? (ctx as Usermod.RunContextInput) : {};
+    return runPostprocessors(stage === "send" ? "send" : "export", gcode, { ...input, internal: false });
+  });
+}
+
+/* --------------------------------------------------------------- startup */
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  log("info", `loader ${LOADER_VERSION} starting; app ${app.getVersion()} electron ${process.versions.electron ?? "?"}; root=${ROOT_DIR}`);
+  loadConfig();
+  discoverManifests();
+  loadPostprocessors();
+  registerLoaderIpc();
+  loadMainMods();
+} catch (error) {
+  recordError("startup", error);
+}
+
+export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR };

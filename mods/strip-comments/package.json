@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/strip-comments",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Removes comments and blank lines (keeps the app header block)",
+  "usermod": { "name": "strip-comments", "postprocessor": "dist/index.js", "order": 40, "description": "Removes comments and blank lines (keeps the app header block)" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

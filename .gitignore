@@ -1,3 +1,9 @@
+# compiled output (tsc) - the installer builds it
+dist/
+
+# node_modules (TypeScript + type declarations only)
+node_modules/
+
 # build output of tools/install.ps1 (extracted app + repacked archive, ~530 MB)
 build/
 

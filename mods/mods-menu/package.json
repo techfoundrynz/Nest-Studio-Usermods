@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/mods-menu",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "App-bar MODS button and status panel",
+  "usermod": { "name": "mods-menu", "ui": "dist/index.js", "order": 10, "description": "App-bar MODS button and status panel" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "neststudio-usermods",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "User-mod loader, installer and bundled mods for Nest Studio (Nestworks desktop CNC software)",
+  "packageManager": "pnpm@11.15.1",
+  "engines": { "node": ">=20", "pnpm": ">=10" },
+  "scripts": {
+    "build": "pnpm --filter \"./packages/**\" --filter \"./mods/**\" run build",
+    "watch": "concurrently -n loader,mods -c cyan,green \"pnpm --filter @neststudio-usermods/loader run watch\" \"pnpm --filter \\\"./mods/**\\\" --parallel run watch\"",
+    "clean": "pnpm --filter \"./packages/**\" --filter \"./mods/**\" exec node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "test": "pnpm run build && node packages/loader/dist/tests/harness.js",
+    "install:app": "tsx packages/installer/src/install.ts",
+    "uninstall:app": "tsx packages/installer/src/install.ts --uninstall",
+    "build:asar": "tsx packages/installer/src/install.ts --build-only",
+    "mods": "tsx packages/installer/src/install.ts --select-mods"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "electron": "^39.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

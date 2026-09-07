@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/dev-shortcuts",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Ctrl+Shift+M panel, Ctrl+Shift+R reload UI, Ctrl+Shift+L open log",
+  "usermod": { "name": "dev-shortcuts", "ui": "dist/index.js", "order": 40, "description": "Ctrl+Shift+M panel, Ctrl+Shift+R reload UI, Ctrl+Shift+L open log" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

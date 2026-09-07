@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/export-copy",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Also writes each exported program to a configured folder (off until targetDir is set)",
+  "usermod": { "name": "export-copy", "postprocessor": "dist/index.js", "order": 900, "description": "Also writes each exported program to a configured folder (off until targetDir is set)" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

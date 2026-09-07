@@ -1,0 +1,10 @@
+packages:
+  - "packages/*"
+  - "mods/*"
+
+# Dependency build scripts (pnpm >= 10 blocks them unless listed here).
+allowBuilds:
+  # devDependency for its TypeScript declarations only: never let it download the Electron binary.
+  electron: false
+  # tsx needs esbuild's platform binary check.
+  esbuild: true
