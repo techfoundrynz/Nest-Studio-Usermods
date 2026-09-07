@@ -62,6 +62,10 @@
       "settleSeconds": 3,
       "webhookUrl": "",
       "silent": false
+    },
+    "ui-scale": {
+      "zoom": 1,
+      "compact": false
     }
   }
 }

@@ -78,7 +78,7 @@ mods/
   feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
   strip-comments, line-numbers                                                              (post-processors)
   mods-menu, dark-mode, gcode-lab, dev-shortcuts                                            (UI)
-  app-tools, job-notifier                                                                   (main + UI)
+  app-tools, job-notifier, ui-scale                                                         (main + UI)
 mods.default.json   tracked template: enabled list (empty) + default settings
 mods.json           per-machine copy (git-ignored), created from the template on first run, edited by Mods… / settings forms
 docs/          launch-options.md, architecture.md, mod-api.md
@@ -112,6 +112,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `line-numbers` | post (off) | Adds `N` line numbers |
 | `mods-menu` | ui | App-bar button and panel: status, mod actions, reload post-processors / UI |
 | `dark-mode` | ui | Sun/moon toolbar button that switches Nest Studio's built-in dark theme; optional follow-OS setting |
+| `ui-scale` | ui + main | UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, remembered) and a compact density mode that tightens the app's spacing tokens |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via chain |
 | `app-tools` | ui + main | Open app logs / user data / usermod.log, CAM service status, open API docs |
 | `dev-shortcuts` | ui | `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log, `F12` DevTools |

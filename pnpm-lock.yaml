@@ -108,6 +108,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/ui-scale:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   packages/asar: {}
 
   packages/installer:

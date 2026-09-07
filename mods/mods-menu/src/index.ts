@@ -124,7 +124,7 @@
       status.replaceChildren(
         rt.el("div", { text: hasUnsaved ? "Saved. Nest Studio must restart to finish; you have unsaved project changes, so save them first." : "Saved. Nest Studio must restart to finish." }),
         ui.buttonRow([
-          ui.button(hasUnsaved ? "Restart anyway (unsaved work is lost)" : "Restart Nest Studio now", () => window.usermod.relaunch(), { primary: !hasUnsaved }),
+          ui.button(hasUnsaved ? "Restart anyway (unsaved work is lost)" : "Restart Nest Studio now", async () => void (await window.usermod.relaunch()), { primary: !hasUnsaved }),
           ui.button("Later", () => modal.close())
         ])
       );

@@ -86,7 +86,7 @@ void (async () => {
   check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
   const enabledSet = initial.available.filter((m) => !m.core && !["strip-comments", "line-numbers"].includes(m.name)).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
-  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 6 && enabledInfo.mainMods.length === 2, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 6 && enabledInfo.mainMods.length === 3, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
   check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
 
   let written: { filePath: string; data: string } | null = null;
@@ -139,15 +139,17 @@ void (async () => {
   check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "strip-comments")?.enabled === false && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("job-notifier") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
-  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
+  const zoom = data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 1.25));
+  check("ui-scale clamps and reports zoom", zoom.zoom === 1.25 && data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 9)).zoom === 2);
 
   // job-notifier: gcode-sent event recorded the job; a machine_status stream via webContents.send is observed.
   const status1 = data(await invoke<{ fileName: string | null; totalLines: number | null; phase: string }>("usermod:notifier:status"));
   check("job-notifier saw gcode-sent", status1.fileName === "a.nc" && status1.totalLines === 10 && status1.phase === "running", JSON.stringify(status1));
-  check("job-notifier hooked web-contents-created", webContentsHooks.length === 1);
-  const fakeContents = { send: (_channel: string, ..._args: unknown[]) => undefined };
-  webContentsHooks[0]?.({}, fakeContents);
+  check("main mods hooked web-contents-created (job-notifier, ui-scale)", webContentsHooks.length === 2, String(webContentsHooks.length));
+  const fakeContents = { send: (_channel: string, ..._args: unknown[]) => undefined, on: (_event: string, _listener: unknown) => undefined, getURL: () => "file:///renderer/index.html" };
+  for (const hook of webContentsHooks) hook({}, fakeContents);
   fakeContents.send("device:stream-event", { type: "machine_status", payload: { status: "Hold", Ln: 42 } });
   const status2 = data(await invoke<{ phase: string; lastLine: number | null }>("usermod:notifier:status"));
   check("job-notifier tracks machine status", status2.phase === "paused" && status2.lastLine === 42, JSON.stringify(status2));
