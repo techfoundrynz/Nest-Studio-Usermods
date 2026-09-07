@@ -28,6 +28,11 @@
     far: number;
     minDistance: number;
     maxDistance: number;
+    panSensitivity: number;
+    factor: number;
+    applySnapshot: UsermodCameraControllerLike["applySnapshot"];
+    saveState: UsermodCameraControllerLike["saveState"];
+    getSnapshot: UsermodCameraControllerLike["getSnapshot"];
   }
   const saved = new WeakMap<UsermodSceneManagerLike, SavedView>();
 
@@ -68,21 +73,48 @@
     const tan = (deg: number): number => Math.tan((deg * Math.PI) / 360);
     if (on && !saved.has(manager)) {
       const factor = tan(camera.fov) / tan(isoFov);
-      saved.set(manager, { fov: camera.fov, near: camera.near, far: camera.far, minDistance: c.config.minDistance, maxDistance: c.config.maxDistance });
+      const originals = { applySnapshot: c.applySnapshot, saveState: c.saveState, getSnapshot: c.getSnapshot };
+      saved.set(manager, {
+        fov: camera.fov,
+        near: camera.near,
+        far: camera.far,
+        minDistance: c.config.minDistance,
+        maxDistance: c.config.maxDistance,
+        panSensitivity: c.config.panSensitivity,
+        factor,
+        ...originals
+      });
       c.config.minDistance *= factor;
       c.config.maxDistance *= factor;
+      c.config.panSensitivity /= factor; // pan step is distance * sensitivity: keep screen-space speed unchanged
       c.distance *= factor;
       camera.near *= factor;
       camera.far *= factor;
       camera.fov = isoFov;
       camera.updateProjectionMatrix();
+      // The app (fit / reset / presets / per-project camera memory) thinks in perspective distances.
+      // Convert on the way in and out so its numbers stay valid while we run at iso scale.
+      c.applySnapshot = (snapshot) => originals.applySnapshot.call(c, { ...snapshot, distance: snapshot.distance * factor });
+      c.getSnapshot = () => {
+        const snap = originals.getSnapshot.call(c);
+        return { ...snap, distance: snap.distance / factor };
+      };
+      c.saveState = () => {
+        const current = c.distance;
+        c.distance = current / factor;
+        originals.saveState.call(c);
+        c.distance = current;
+      };
       lookFrom(manager, [1, -1, 1]);
     } else if (!on && saved.has(manager)) {
       const prev = saved.get(manager)!;
-      const factor = tan(camera.fov) / tan(prev.fov); // < 1: back to the perspective scale
+      c.applySnapshot = prev.applySnapshot;
+      c.saveState = prev.saveState;
+      c.getSnapshot = prev.getSnapshot;
       c.config.minDistance = prev.minDistance;
       c.config.maxDistance = prev.maxDistance;
-      c.distance = Math.min(prev.maxDistance, Math.max(prev.minDistance, c.distance * factor));
+      c.config.panSensitivity = prev.panSensitivity;
+      c.distance = Math.min(prev.maxDistance, Math.max(prev.minDistance, c.distance / prev.factor));
       camera.near = prev.near;
       camera.far = prev.far;
       camera.fov = prev.fov;

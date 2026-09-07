@@ -45,15 +45,25 @@ interface UsermodCameraLike {
   lookAt(target: UsermodVector3Like): void;
   updateProjectionMatrix(): void;
 }
+interface UsermodCameraSnapshot {
+  position: number[];
+  target: number[];
+  up: number[];
+  zoom: number;
+  viewQuaternion: number[];
+  distance: number;
+}
 interface UsermodCameraControllerLike {
   camera: UsermodCameraLike;
   target: UsermodVector3Like;
   distance: number;
-  /** Wheel zoom clamps distance to [minDistance, maxDistance]. */
-  config: { distance: number; minDistance: number; maxDistance: number };
+  /** Wheel zoom clamps distance to [minDistance, maxDistance]; pan speed is distance * panSensitivity. */
+  config: { distance: number; minDistance: number; maxDistance: number; panSensitivity: number };
   viewQuat: UsermodQuaternionLike;
   updateCamera(): void;
   saveState(): void;
+  getSnapshot(): UsermodCameraSnapshot;
+  applySnapshot(snapshot: UsermodCameraSnapshot): void;
   reset(): void;
   emit?(type: string): void;
 }
