@@ -80,7 +80,7 @@ function parseArgs(argv: string[]): Options {
     else if (arg === "--yes" || arg === "-y") options.yes = true;
     else if (arg.startsWith("--install-root=")) options.installRoot = arg.slice("--install-root=".length);
     else if (arg === "--help" || arg === "-h") {
-      console.log(fs.readFileSync(__filename, "utf8").split("*/")[0]!.replace(/^\/\*\s*/, "").replace(/^ \* ?/gm, ""));
+      console.log(fs.readFileSync(__filename, "utf8").split("*/")[0]!.replace(/^#!.*\r?\n/, "").replace(/^\/\*\s*/, "").replace(/^ \* ?/gm, ""));
       process.exit(0);
     } else fail(`unknown argument: ${arg}`);
   }
