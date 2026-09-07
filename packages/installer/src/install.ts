@@ -401,6 +401,23 @@ function patchCsp(file: string): void {
   } else warn("could not find script-src 'self'; in index.html - UI mods may be blocked by CSP");
 }
 
+/** Read the patches back out of the finished archive so a stale or skipped patch can never be installed. */
+function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archive: string, flags: Flags): void {
+  const read = (rel: string): string => asarLib.readEntry(archive, rel).toString("utf8");
+  const main = read("out/main/index.js");
+  const problems: string[] = [];
+  if (!main.includes(MAIN_MARKER)) problems.push("loader require missing from out/main/index.js");
+  if (!main.includes(JSON.stringify(LOADER_MAIN))) problems.push("loader path in out/main/index.js does not match this repo");
+  for (const o of BUILD_OPTIONS) if (flags[o.id] && !main.includes(o.marker)) problems.push(`${o.label} requested but not present`);
+  const preload = read("out/preload/index.js");
+  if (!preload.includes(PRELOAD_BEGIN) || !preload.includes(PRELOAD_END)) problems.push("preload bridge block missing");
+  if (!read("out/renderer/index.html").includes("script-src 'self' file:")) problems.push("CSP file: allowance missing");
+  const engine = asarLib.list(archive).find((e) => /^out\/renderer\/assets\/engine-3d-.*\.js$/.test(e.path));
+  if (engine && !read(engine.path).includes("/* NEST-USERMOD-SCENE */")) warn("3D scene access marker missing from the engine chunk; view mods will report 'not patched in'");
+  if (problems.length) fail(`packed archive failed verification:\n  - ${problems.join("\n  - ")}`);
+  step("verified patches in the packed archive");
+}
+
 /* ----------------------------------------------------------------- install */
 async function install(options: Options, buildOnly: boolean): Promise<void> {
   const resources = path.join(options.installRoot, "resources");
@@ -457,6 +474,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   step("repacking archive");
   const packed = asarLib.pack(sourceAsar, STAGING_DIR, PACKED_ASAR);
   console.log(`    ${packed.files} files, ${(packed.payloadBytes / 1024 / 1024).toFixed(1)} MB payload -> ${PACKED_ASAR}`);
+  verifyPacked(asarLib, PACKED_ASAR, flags);
   const packedSha = sha256(PACKED_ASAR);
   writeText(STAMP_FILE, JSON.stringify({ sourceSha, packedSha, builtAt: new Date().toISOString(), flags } satisfies Stamp, null, 2));
   if (buildOnly) {
