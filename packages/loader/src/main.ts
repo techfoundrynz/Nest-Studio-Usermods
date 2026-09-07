@@ -30,9 +30,18 @@ interface Manifest {
   description: string;
   order: number;
   core: boolean;
+  /** Declared in the manifest; undefined = derive from kinds. */
+  reload?: Usermod.ReloadLevel;
   postprocessor?: string;
   ui?: string;
   main?: string;
+}
+const isReloadLevel = (value: unknown): value is Usermod.ReloadLevel => value === "none" || value === "ui" || value === "app";
+function reloadLevelFor(m: Manifest): Usermod.ReloadLevel {
+  if (m.reload) return m.reload;
+  if (m.main) return "app";
+  if (m.ui) return "ui";
+  return "none";
 }
 interface LoadedPostprocessor {
   name: string;
@@ -140,6 +149,7 @@ function readManifest(dir: string): Manifest | null {
     description: typeof m.description === "string" ? m.description : typeof pkg.description === "string" ? pkg.description : "",
     order: typeof m.order === "number" ? m.order : 100,
     core: m.core === true,
+    ...(isReloadLevel(m.reload) ? { reload: m.reload } : {}),
     ...(entry("postprocessor") ? { postprocessor: entry("postprocessor") } : {}),
     ...(entry("ui") ? { ui: entry("ui") } : {}),
     ...(entry("main") ? { main: entry("main") } : {})
@@ -180,6 +190,8 @@ function availableMods(): Usermod.AvailableMod[] {
     order: m.order,
     enabled: isEnabled(m),
     core: m.core,
+    reload: reloadLevelFor(m),
+    reloadDeclared: m.reload !== undefined,
     active: { main: state.mainMods.some((x) => x.name === m.name), postprocessor: state.postprocessors.some((p) => p.name === m.name) }
   }));
 }
@@ -511,6 +523,12 @@ function registerLoaderIpc(): void {
     return getInfo();
   });
   define("open-mod-dir", () => shell.openPath(ROOT_DIR));
+  define("relaunch", () => {
+    log("info", "relaunch requested from the MODS menu");
+    app.relaunch();
+    // Hard exit on purpose: the app's own quit flow intercepts to ask about unsaved work, which the UI checked already.
+    setTimeout(() => app.exit(0), 150);
+  });
   define("run-postprocessors", (stage: unknown, gcode: unknown, ctx: unknown) => {
     if (typeof gcode !== "string") throw new Error("gcode must be a string");
     const input: Usermod.RunContextInput = isRecord(ctx) ? (ctx as Usermod.RunContextInput) : {};

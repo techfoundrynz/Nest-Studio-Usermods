@@ -34,8 +34,9 @@ applies marker-based patches, verifies the patched main script still parses, rep
 into place. Nest Studio must be closed for the copy.
 
 **Choosing mods.** Everything except the MODS menu itself is off after install. Open the MODS menu in
-the app and click **Mods…** to switch mods on; post-processors apply immediately, UI mods after "Save and
-reload UI", and switched-off main mods stop at the next app start. The CLI is the fallback if a mod ever
+the app and click **Mods…** to switch mods on. Save does whatever the toggled mods need: post-processors
+apply at once, a UI mod change reloads the UI automatically, and switching a main-process mod off offers
+an app restart (mods can override this with a `reload` manifest field). The CLI is the fallback if a mod ever
 breaks the UI: `pnpm run mods` (picker), or `pnpm run install:app -- --disable-mods=a,b`,
 `--enable-mods=a,b`, `--disable-all-mods`. These only edit `mods.json`; no rebuild needed.
 
@@ -91,7 +92,8 @@ Each mod is a package whose `package.json` carries a `usermod` manifest:
 ```
 
 Keys: `postprocessor`, `ui`, `main` (entry files, any combination), `order` (load/run order, default 100),
-`name`, `description`, `core` (always on, not user-toggleable; only `mods-menu` uses it). The loader
+`name`, `description`, `core` (always on, not user-toggleable; only `mods-menu` uses it), `reload`
+(`none` / `ui` / `app`, normally derived from the kinds; see docs/mod-api.md). The loader
 discovers every `mods/*/package.json` with a manifest at startup and loads those listed in `mods.json`
 `enabled`.
 

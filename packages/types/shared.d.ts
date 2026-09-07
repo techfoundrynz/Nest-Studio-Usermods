@@ -16,6 +16,8 @@ declare namespace Usermod {
     settings: Record<string, Record<string, unknown> | undefined>;
   }
   type ModKind = "postprocessor" | "main" | "ui";
+  /** What has to happen after a mod is switched on/off for the change to take effect. */
+  type ReloadLevel = "none" | "ui" | "app";
   /** Every mod package found under mods/, enabled or not. */
   interface AvailableMod {
     name: string;
@@ -25,6 +27,10 @@ declare namespace Usermod {
     enabled: boolean;
     /** Always loaded and not user-toggleable (e.g. mods-menu). */
     core: boolean;
+    /** Manifest "reload", or derived: main -> "app", ui -> "ui", postprocessor -> "none". */
+    reload: ReloadLevel;
+    /** True when the manifest declared it (then it applies in both directions). */
+    reloadDeclared: boolean;
     /** Runtime pieces already active for this mod (main mods stay active until restart). */
     active: { main: boolean; postprocessor: boolean };
   }
@@ -92,6 +98,8 @@ declare namespace Usermod {
     /** Replace mods.json "enabled"; post-processors reload and newly enabled main mods activate at once,
      * UI mods need a renderer reload, disabled main mods stop at the next app start. */
     setEnabled(names: string[]): Promise<IpcResult<Info>>;
+    /** Hard restart of Nest Studio (app.relaunch + exit). Check window.api.app.checkUnsavedChanges() first. */
+    relaunch(): Promise<IpcResult<void>>;
   }
 
   /* ------------------------------------------------------------ renderer runtime */
@@ -320,6 +328,8 @@ declare namespace NestStudio {
       platform: string;
       getPath(name: string): Promise<Result<string>>;
       getLanguage(): Promise<Result<string>>;
+      /** True when the user store holds unsaved project tabs. */
+      checkUnsavedChanges(): Promise<Result<boolean>>;
     };
     gcode: {
       validate(gcode: string, toolSlots?: string[]): Promise<Result<{ result: ValidationResult }>>;

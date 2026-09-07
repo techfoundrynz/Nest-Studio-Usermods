@@ -87,30 +87,49 @@
         if (m.core) row.querySelector("input")!.disabled = true;
         return row;
       });
-    const note = rt.el("small", { class: "usermod-sub", text: "Post-processors apply immediately. Newly enabled UI mods need a UI reload; disabled main mods stop at the next app start." });
-    modal.body.append(
-      ...rows,
-      note,
-      ui.buttonRow([
-        ui.button(
-          "Save",
-          async () => {
-            const r = await window.usermod.setEnabled([...chosen]);
-            if (!r.ok) throw new Error(r.message);
-            rt.toast(`Enabled: ${r.data.config.enabled.join(", ") || "none"}`, { kind: "success", duration: 5000 });
-            modal.close();
-          },
-          { primary: true }
-        ),
-        ui.button("Save and reload UI", async () => {
-          const r = await window.usermod.setEnabled([...chosen]);
-          if (!r.ok) throw new Error(r.message);
-          rt.toast("Reloading renderer…");
-          setTimeout(() => window.location.reload(), 250);
-        }),
-        ui.button("Cancel", () => modal.close())
-      ])
-    );
+    const note = rt.el("small", { class: "usermod-sub", text: "Saving applies post-processors at once, reloads the UI automatically when a UI mod changed, and offers a restart when a main-process mod was switched off." });
+    const status = rt.el("div", { class: "usermod-sub" });
+
+    /** Strongest requirement among the toggled mods. Enabling a main mod activates it immediately, so only
+     *  switching one off needs the app restart, unless the manifest declared "reload" explicitly. */
+    const requiredReload = (): Usermod.ReloadLevel => {
+      const rank: Record<Usermod.ReloadLevel, number> = { none: 0, ui: 1, app: 2 };
+      let level: Usermod.ReloadLevel = "none";
+      for (const m of d.available) {
+        const willBe = chosen.has(m.name);
+        if (m.core || willBe === m.enabled) continue;
+        let need = m.reload;
+        if (!m.reloadDeclared && need === "app" && willBe) need = m.kinds.includes("ui") ? "ui" : "none";
+        if (rank[need] > rank[level]) level = need;
+      }
+      return level;
+    };
+    const save = async (): Promise<void> => {
+      const level = requiredReload();
+      const r = await window.usermod.setEnabled([...chosen]);
+      if (!r.ok) throw new Error(r.message);
+      if (level === "none") {
+        rt.toast(`Enabled: ${r.data.config.enabled.join(", ") || "none"}`, { kind: "success", duration: 4000 });
+        modal.close();
+        return;
+      }
+      if (level === "ui") {
+        rt.toast("Saved. Reloading UI…", { kind: "success" });
+        setTimeout(() => window.location.reload(), 300);
+        return;
+      }
+      // "app": a main-process mod was switched off (or a mod declared reload: "app").
+      const unsaved = await window.api.app.checkUnsavedChanges();
+      const hasUnsaved = unsaved.ok && unsaved.data === true;
+      status.replaceChildren(
+        rt.el("div", { text: hasUnsaved ? "Saved. Nest Studio must restart to finish; you have unsaved project changes, so save them first." : "Saved. Nest Studio must restart to finish." }),
+        ui.buttonRow([
+          ui.button(hasUnsaved ? "Restart anyway (unsaved work is lost)" : "Restart Nest Studio now", () => window.usermod.relaunch(), { primary: !hasUnsaved }),
+          ui.button("Later", () => modal.close())
+        ])
+      );
+    };
+    modal.body.append(...rows, note, status, ui.buttonRow([ui.button("Save", save, { primary: true }), ui.button("Cancel", () => modal.close())]));
   }
 
   async function toggle(): Promise<void> {

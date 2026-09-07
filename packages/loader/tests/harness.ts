@@ -137,6 +137,8 @@ void (async () => {
   check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
   check("mods left out of enabled are not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
   check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "strip-comments")?.enabled === false && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
+  const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
+  check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("job-notifier") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
   check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier"]), info.mainMods.map((m) => m.name).join(","));
   check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
 

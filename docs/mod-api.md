@@ -27,7 +27,13 @@ settings) and loads them in `order`. Types come from `@neststudio-usermods/types
 
 Any combination of `postprocessor`, `main` and `ui` entries is allowed. `order` sorts post-processors
 (execution order) and UI mods (injection order); lower runs first, default 100. `core: true` marks a mod
-that always loads and cannot be switched off (only `mods-menu`). Mods are opt-in: the loader loads those
+that always loads and cannot be switched off (only `mods-menu`).
+
+`reload` (`"none" | "ui" | "app"`) tells the Mods… dialog what must happen after the mod is switched on
+or off. Leave it out and it is derived: `postprocessor` → `none` (applies at once), `ui` → `ui` (the dialog
+reloads the renderer automatically on Save), `main` → `app` when switching off (main mods cannot unload;
+the dialog offers a restart, after checking for unsaved projects) and immediate activation when switching
+on. Declare it only to override, e.g. `"reload": "app"` for a UI mod that patches something it cannot undo. Mods are opt-in: the loader loads those
 named in `mods.json` `enabled`, which the in-app Mods… dialog (or the installer's CLI fallback) writes.
 Settings live in `mods.json` under `settings.<name>`.
 
