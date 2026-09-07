@@ -24,6 +24,17 @@
   rt.menu.addAction({ id: "open-usermod-log", label: "usermod.log", section: "Folders", order: 30, title: "Open the mod loader log", onClick: () => call("tools:open-usermod-log") });
 
   rt.menu.addAction({
+    id: "toggle-devtools",
+    label: "Toggle DevTools (F12)",
+    section: "Developer",
+    order: 10,
+    title: "Chromium DevTools for the renderer; needs an install with --devtools",
+    onClick: async () => {
+      const r = await call<{ enabled: boolean; open: boolean; reason?: string }>("tools:toggle-devtools");
+      if (!r.enabled) rt.toast(r.reason ?? "DevTools unavailable", { kind: "warn", duration: 6000 });
+    }
+  });
+  rt.menu.addAction({
     id: "cam-status",
     label: "CAM service status",
     section: "CAM service",

@@ -33,15 +33,22 @@
 
     const children: (Node | null)[] = [
       rt.el("h3", { text: "User mods" }),
-      rt.el("div", { class: "usermod-sub", text: `Loader ${d.loaderVersion} · Nest Studio ${d.appVersion} · Electron ${d.electronVersion}` }),
+      rt.el("div", { class: "usermod-sub", text: `Loader ${d.loaderVersion} · Nest Studio ${d.appVersion} · Electron ${d.electronVersion} · ${d.available.filter((m) => m.enabled && !m.core).length}/${d.available.filter((m) => !m.core).length} mods enabled` }),
       ...actionBlocks,
       ui.section("Post-processors (export order)", ui.list(d.postprocessors, (p) => withDesc(`${p.name} [${p.stages.join(", ")}]`, p.description))),
       ui.section("Main mods", ui.list(d.mainMods, (m) => withDesc(m.name, m.description))),
       ui.section("UI mods", ui.list(d.uiMods, (m) => [m.name])),
+      ui.section(
+        "Build options",
+        d.buildFlags
+          ? ui.list(Object.entries(d.buildFlags.flags), ([key, on]) => [`${key}: ${on ? "on" : "off"}`, rt.el("small", { text: on ? "" : "  — enable with the installer (pnpm run install:app)" })])
+          : rt.el("small", { text: "Unknown: this app was patched by an older installer. Re-run pnpm run install:app to record them." })
+      ),
       d.errors.length > 0 ? ui.section("Recent errors", ui.list(d.errors.slice(-5), (e) => [rt.el("span", { class: "usermod-err", text: `${e.scope}: ${e.message}` })])) : null,
       ui.section(
         "Maintenance",
         ui.buttonRow([
+          ui.button("Mods…", () => openModPicker(d), { primary: true, title: "Choose which mods are enabled" }),
           ui.button("Open mod folder", () => void window.usermod.openModDir()),
           ui.button(
             "Reload post-processors",
@@ -64,6 +71,46 @@
       )
     ];
     popover.body.replaceChildren(...children.filter((node): node is Node => node !== null));
+  }
+
+  /** Enable / disable mods (writes mods.json through the loader). */
+  function openModPicker(d: Usermod.Info): void {
+    popover?.close();
+    const modal = ui.modal("Mods", { width: 560 });
+    const chosen = new Set(d.available.filter((m) => m.enabled).map((m) => m.name));
+    const rows = d.available
+      .slice()
+      .sort((a, b) => Number(b.core) - Number(a.core) || a.name.localeCompare(b.name))
+      .map((m) => {
+        const label = `${m.name}  [${m.kinds.join(" + ")}]${m.core ? "  (core, always on)" : ""}`;
+        const row = ui.toggle(label, m.enabled, (on) => (on ? chosen.add(m.name) : chosen.delete(m.name)), m.description);
+        if (m.core) row.querySelector("input")!.disabled = true;
+        return row;
+      });
+    const note = rt.el("small", { class: "usermod-sub", text: "Post-processors apply immediately. Newly enabled UI mods need a UI reload; disabled main mods stop at the next app start." });
+    modal.body.append(
+      ...rows,
+      note,
+      ui.buttonRow([
+        ui.button(
+          "Save",
+          async () => {
+            const r = await window.usermod.setEnabled([...chosen]);
+            if (!r.ok) throw new Error(r.message);
+            rt.toast(`Enabled: ${r.data.config.enabled.join(", ") || "none"}`, { kind: "success", duration: 5000 });
+            modal.close();
+          },
+          { primary: true }
+        ),
+        ui.button("Save and reload UI", async () => {
+          const r = await window.usermod.setEnabled([...chosen]);
+          if (!r.ok) throw new Error(r.message);
+          rt.toast("Reloading renderer…");
+          setTimeout(() => window.location.reload(), 250);
+        }),
+        ui.button("Cancel", () => modal.close())
+      ])
+    );
   }
 
   async function toggle(): Promise<void> {

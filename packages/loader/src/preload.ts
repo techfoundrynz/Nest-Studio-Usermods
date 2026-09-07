@@ -23,7 +23,8 @@
       reload: () => invoke<Usermod.Info>("reload"),
       openModDir: () => invoke<string>("open-mod-dir"),
       runPostprocessors: (stage, gcode, ctx) => invoke<string>("run-postprocessors", stage, gcode, ctx),
-      setSettings: (modName, settings) => invoke<Usermod.Config>("set-settings", modName, settings)
+      setSettings: (modName, settings) => invoke<Usermod.Config>("set-settings", modName, settings),
+      setEnabled: (names) => invoke<Usermod.Info>("set-enabled", names)
     };
     if (process.contextIsolated) {
       contextBridge.exposeInMainWorld("usermod", bridge);

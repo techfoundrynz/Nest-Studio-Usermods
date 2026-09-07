@@ -6,12 +6,17 @@
  *   pnpm run install:app -- --install    non-interactive install (or re-install after an app update)
  *   pnpm run install:app -- --uninstall  restore the original app.asar
  *   pnpm run install:app -- --build-only build build/app.asar without touching the install (no admin)
- *   pnpm run install:app -- --select-mods
- *   flags: --force  --skip-build  --install-root=<dir>  --yes
+ *   flags: --force  --skip-build  --install-root=<dir>  --yes  --allow-untested (see versions.json)
+ *   mods:  normally chosen inside Nest Studio (MODS menu -> Mods…). Fallback when a mod breaks the UI:
+ *          --select-mods            interactive picker
+ *          --disable-mods=a,b       --enable-mods=a,b       --disable-all-mods   (edit mods.json, no rebuild)
+ *   build options (baked into the patched archive; asked interactively when not given):
+ *          --devtools / --no-devtools   re-enable Chromium DevTools in the app (F12 toggles them)
+ *          --cam-docs / --no-cam-docs   start the CAM service with ENABLE_DOCS=1 (Swagger at 127.0.0.1:9630/docs)
  *
  * Nest Studio's Electron build only loads code from resources\app.asar, so the loader is injected by
- * rebuilding that archive: extract -> patch three files -> repack -> back up the original as
- * app.asar.orig -> copy into place. Only the final copy needs an elevated shell.
+ * rebuilding that archive: extract -> patch -> repack -> back up the original as app.asar.orig ->
+ * copy into place. Only the final copy needs an elevated shell.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -22,59 +27,113 @@ import prompts from "prompts";
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const LOADER_MAIN = path.join(ROOT, "packages", "loader", "dist", "main.js");
 const LOADER_PRELOAD = path.join(ROOT, "packages", "loader", "dist", "preload.js");
-const MODS_DIR = path.join(ROOT, "mods");
-const CONFIG_FILE = path.join(ROOT, "mods.json");
 const BUILD_DIR = path.join(ROOT, "build");
 const STAGING_DIR = path.join(BUILD_DIR, "app");
 const PACKED_ASAR = path.join(BUILD_DIR, "app.asar");
 const STAMP_FILE = path.join(BUILD_DIR, "stamp.json");
+/** Read by the loader so the MODS panel can show which build options the installed archive carries. */
+const FLAGS_FILE = path.join(BUILD_DIR, "flags.json");
 
 const MAIN_MARKER = "/* NEST-USERMOD-MAIN */";
 const PRELOAD_BEGIN = "// ==== NEST-USERMOD-PRELOAD-BEGIN ====";
 const PRELOAD_END = "// ==== NEST-USERMOD-PRELOAD-END ====";
+
+/* ----------------------------------------------------------- build options */
+interface BuildOption {
+  id: string;
+  cli: string;
+  label: string;
+  description: string;
+  /** Idempotent text transforms on out/main/index.js; apply() must leave a marker so revert() can undo it. */
+  apply(source: string): string;
+  revert(source: string): string;
+  marker: string;
+}
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+const BUILD_OPTIONS: BuildOption[] = [
+  {
+    id: "devtools",
+    cli: "devtools",
+    label: "Chromium DevTools",
+    description: "The app ships OPEN_DEV_TOOLS=false and closes DevTools as soon as they open. F12 (dev-shortcuts) toggles them.",
+    marker: "/* NEST-USERMOD-DEVTOOLS */",
+    // Both replacements must stay valid JavaScript: notes live INSIDE the comment.
+    apply: (s) =>
+      s
+        .replace("const OPEN_DEV_TOOLS = false;", "const OPEN_DEV_TOOLS = true; /* NEST-USERMOD-DEVTOOLS */")
+        .replace(/^(\s*)webContents\.closeDevTools\(\);/m, "$1void 0; /* NEST-USERMOD-DEVTOOLS closeDevTools() disabled */"),
+    revert: (s) =>
+      s
+        .replace("const OPEN_DEV_TOOLS = true; /* NEST-USERMOD-DEVTOOLS */", "const OPEN_DEV_TOOLS = false;")
+        .replace(/^(\s*)void 0; \/\* NEST-USERMOD-DEVTOOLS closeDevTools\(\) disabled \*\//m, "$1webContents.closeDevTools();")
+  },
+  {
+    id: "camDocs",
+    cli: "cam-docs",
+    label: "CAM API docs (Swagger)",
+    description: "Starts the CAM service with ENABLE_DOCS=1 so http://127.0.0.1:9630/docs works without launching from a shell.",
+    marker: "/* NEST-USERMOD-CAMDOCS */",
+    apply: (s) => s.replace("env: { ...process.env },", 'env: { ...process.env, ENABLE_DOCS: "1" }, /* NEST-USERMOD-CAMDOCS */'),
+    revert: (s) => s.replace('env: { ...process.env, ENABLE_DOCS: "1" }, /* NEST-USERMOD-CAMDOCS */', "env: { ...process.env },")
+  }
+];
+type Flags = Record<string, boolean>;
 
 interface Options {
   action: "menu" | "install" | "uninstall" | "build-only" | "select-mods";
   force: boolean;
   skipBuild: boolean;
   yes: boolean;
+  allowUntested: boolean;
   installRoot: string;
+  enableMods: string[];
+  disableMods: string[];
+  disableAllMods: boolean;
+  /** Build options given on the command line; undefined = ask (TTY) or keep the previous build's value. */
+  flags: Record<string, boolean | undefined>;
 }
 interface Stamp {
   sourceSha: string;
   packedSha: string;
   builtAt: string;
+  flags?: Flags;
 }
-interface ModInfo {
-  name: string;
-  dir: string;
-  description: string;
-  kinds: string[];
-  enabled: boolean;
-}
-interface Config {
-  disabled: string[];
-  settings: Record<string, unknown>;
-}
-
 /* ------------------------------------------------------------------ output */
 const color = (code: number, text: string): string => (process.stdout.isTTY ? `\u001b[${code}m${text}\u001b[0m` : text);
 const step = (text: string): void => console.log(color(36, "==> ") + text);
 const ok = (text: string): void => console.log(color(32, text));
 const warn = (text: string): void => console.log(color(33, `WARNING: ${text}`));
-class InstallError extends Error { }
+class InstallError extends Error {}
 const fail = (text: string): never => {
   throw new InstallError(text);
 };
 
 /* -------------------------------------------------------------------- args */
 function parseArgs(argv: string[]): Options {
-  const options: Options = { action: "menu", force: false, skipBuild: false, yes: false, installRoot: "C:\\Program Files\\nest-studio" };
+  const options: Options = {
+    action: "menu",
+    force: false,
+    skipBuild: false,
+    yes: false,
+    allowUntested: false,
+    installRoot: "C:\\Program Files\\nest-studio",
+    enableMods: [],
+    disableMods: [],
+    disableAllMods: false,
+    flags: {}
+  };
+  const list = (value: string): string[] => value.split(",").map((s) => s.trim()).filter(Boolean);
   for (const arg of argv) {
-    if (arg === "--install") options.action = "install";
+    const option = BUILD_OPTIONS.find((o) => arg === `--${o.cli}` || arg === `--no-${o.cli}`);
+    if (option) options.flags[option.id] = arg === `--${option.cli}`;
+    else if (arg === "--install") options.action = "install";
     else if (arg === "--uninstall") options.action = "uninstall";
     else if (arg === "--build-only") options.action = "build-only";
     else if (arg === "--select-mods") options.action = "select-mods";
+    else if (arg.startsWith("--enable-mods=")) options.enableMods.push(...list(arg.slice("--enable-mods=".length)));
+    else if (arg.startsWith("--disable-mods=")) options.disableMods.push(...list(arg.slice("--disable-mods=".length)));
+    else if (arg === "--disable-all-mods") options.disableAllMods = true;
+    else if (arg === "--allow-untested") options.allowUntested = true;
     else if (arg === "--force") options.force = true;
     else if (arg === "--skip-build") options.skipBuild = true;
     else if (arg === "--yes" || arg === "-y") options.yes = true;
@@ -151,41 +210,127 @@ async function loadAsar(): Promise<typeof import("@neststudio-usermods/asar")> {
 }
 
 /* -------------------------------------------------------------------- mods */
-function readConfig(): Config {
-  const raw = readJson<Partial<Config>>(CONFIG_FILE, {});
-  return { disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((d): d is string => typeof d === "string") : [], settings: raw.settings ?? {} };
+/* Normally chosen inside Nest Studio (MODS -> Mods…). The CLI is the fallback when a mod breaks the UI. */
+const MODS_DIR = path.join(ROOT, "mods");
+const CONFIG_FILE = path.join(ROOT, "mods.json");
+interface ModInfo {
+  name: string;
+  description: string;
+  kinds: string[];
+  core: boolean;
+  enabled: boolean;
 }
-function discoverMods(config: Config): ModInfo[] {
+function readConfigFile(): Record<string, unknown> {
+  const raw = readJson<unknown>(CONFIG_FILE, {});
+  return typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+}
+function readEnabled(file: Record<string, unknown>): string[] {
+  return Array.isArray(file.enabled) ? file.enabled.filter((d): d is string => typeof d === "string") : [];
+}
+function discoverMods(enabled: string[]): ModInfo[] {
   if (!fs.existsSync(MODS_DIR)) return [];
   const mods: ModInfo[] = [];
   for (const entry of fs.readdirSync(MODS_DIR)) {
-    const dir = path.join(MODS_DIR, entry);
-    const pkg = readJson<{ name?: string; description?: string; usermod?: Record<string, unknown> }>(path.join(dir, "package.json"), {});
+    const pkg = readJson<{ name?: string; description?: string; usermod?: Record<string, unknown> }>(path.join(MODS_DIR, entry, "package.json"), {});
     if (!pkg.usermod) continue;
     const m = pkg.usermod;
     const name = typeof m.name === "string" ? m.name : (pkg.name ?? entry).replace(/^@[^/]+\//, "");
+    const core = m.core === true;
     const kinds = (["postprocessor", "main", "ui"] as const).filter((k) => typeof m[k] === "string");
-    mods.push({ name, dir, description: String(m.description ?? pkg.description ?? ""), kinds, enabled: !config.disabled.includes(name) });
+    mods.push({ name, description: String(m.description ?? pkg.description ?? ""), kinds, core, enabled: core || enabled.includes(name) });
   }
-  return mods.sort((a, b) => a.name.localeCompare(b.name, "en"));
+  return mods.sort((a, b) => Number(b.core) - Number(a.core) || a.name.localeCompare(b.name, "en"));
+}
+function writeEnabled(names: string[]): void {
+  const file = readConfigFile();
+  file.enabled = [...new Set(names)].sort();
+  if (typeof file.settings !== "object" || file.settings === null) file.settings = {};
+  writeText(CONFIG_FILE, JSON.stringify(file, null, 2) + "\n");
+  ok(`mods.json updated: enabled = ${(file.enabled as string[]).join(", ") || "(none)"}`);
+  console.log("Post-processors apply after 'Reload post-processors' in the MODS panel; UI/main mods after an app restart.");
+}
+function applyModFlags(options: Options): boolean {
+  if (!options.disableAllMods && !options.enableMods.length && !options.disableMods.length) return false;
+  const file = readConfigFile();
+  const mods = discoverMods(readEnabled(file));
+  const known = new Set(mods.filter((m) => !m.core).map((m) => m.name));
+  for (const n of [...options.enableMods, ...options.disableMods]) if (!known.has(n)) fail(`unknown mod: ${n} (known: ${[...known].join(", ")})`);
+  let enabled = new Set(options.disableAllMods ? [] : mods.filter((m) => m.enabled && !m.core).map((m) => m.name));
+  for (const n of options.enableMods) enabled.add(n);
+  for (const n of options.disableMods) enabled.delete(n);
+  writeEnabled([...enabled]);
+  return true;
 }
 async function selectMods(): Promise<void> {
-  const config = readConfig();
-  const mods = discoverMods(config);
+  const mods = discoverMods(readEnabled(readConfigFile()));
   if (!mods.length) fail(`no mods found under ${MODS_DIR}`);
   const answer = await prompts({
     type: "multiselect",
     name: "enabled",
-    message: "Enabled mods (space toggles, enter confirms)",
+    message: "Enabled mods (space toggles, enter confirms; core mods always load)",
     instructions: false,
-    choices: mods.map((m) => ({ title: `${m.name}  ${color(90, `[${m.kinds.join("+")}] ${m.description}`)}`, value: m.name, selected: m.enabled }))
+    choices: mods.map((m) => ({ title: `${m.name}  ${color(90, `[${m.kinds.join("+")}] ${m.description}`)}`, value: m.name, selected: m.enabled, disabled: m.core })),
+    // keep core mods listed (disabled = not toggleable) but never write them to the enabled list
   });
   if (!Array.isArray(answer.enabled)) return; // cancelled
-  const enabled = new Set(answer.enabled as string[]);
-  config.disabled = mods.filter((m) => !enabled.has(m.name)).map((m) => m.name);
-  writeText(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
-  ok(`mods.json updated: ${enabled.size} enabled, ${config.disabled.length} disabled (${config.disabled.join(", ") || "none"}).`);
-  console.log("Post-processor changes apply after 'Reload post-processors' in the MODS panel; UI/main mods after an app restart.");
+  writeEnabled((answer.enabled as string[]).filter((n) => !mods.find((m) => m.name === n)?.core));
+}
+
+/* ----------------------------------------------------------- build options */
+async function resolveFlags(options: Options, stamp: Stamp | null): Promise<Flags> {
+  const flags: Flags = {};
+  for (const o of BUILD_OPTIONS) flags[o.id] = options.flags[o.id] ?? stamp?.flags?.[o.id] ?? false;
+  const unspecified = BUILD_OPTIONS.filter((o) => options.flags[o.id] === undefined);
+  if (unspecified.length && !options.yes && process.stdin.isTTY) {
+    const answer = await prompts({
+      type: "multiselect",
+      name: "on",
+      message: "Build options to bake into the patched app (space toggles, enter confirms)",
+      instructions: false,
+      choices: unspecified.map((o) => ({ title: `${o.label}  ${color(90, o.description)}`, value: o.id, selected: flags[o.id] }))
+    });
+    if (Array.isArray(answer.on)) for (const o of unspecified) flags[o.id] = (answer.on as string[]).includes(o.id);
+  }
+  return flags;
+}
+function patchBuildOptions(file: string, flags: Flags): void {
+  let source = fs.readFileSync(file, "utf8");
+  const original = source;
+  for (const o of BUILD_OPTIONS) {
+    const on = flags[o.id] === true;
+    source = on ? o.apply(source) : o.revert(source);
+    const present = source.includes(o.marker);
+    if (on && !present) warn(`${o.label}: anchors not found in out/main/index.js (app version changed?); option not applied`);
+    step(`${o.label}: ${on && present ? "ON" : "off"}`);
+  }
+  if (source !== original) fs.writeFileSync(file, source, "utf8");
+  assertParses(file);
+}
+/** A syntax error in the patched main script means the app will not start at all: check before packing. */
+function assertParses(file: string): void {
+  const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+  if (result.status !== 0) fail(`patched ${path.basename(file)} does not parse:\n${(result.stderr || result.stdout).trim()}`);
+}
+
+/* --------------------------------------------------------- version policy */
+interface VersionsFile {
+  tested: string[];
+  notes?: Record<string, string>;
+}
+async function checkVersion(version: string, options: Options): Promise<void> {
+  const versions = readJson<VersionsFile>(path.join(ROOT, "versions.json"), { tested: [] });
+  if (versions.tested.includes(version)) {
+    step(`Nest Studio ${version} is a tested version`);
+    return;
+  }
+  warn(`Nest Studio ${version} has not been verified with this loader (tested: ${versions.tested.join(", ") || "none"}).`);
+  console.log("    Patches are anchor-based and usually survive updates; the parse check and anchor warnings above are the safety net.");
+  if (options.allowUntested) return;
+  if (!options.yes && process.stdin.isTTY) {
+    const answer = await prompts({ type: "confirm", name: "go", message: `Continue with untested Nest Studio ${version}?`, initial: false });
+    if (answer.go === true) return;
+  }
+  fail(`refusing to patch untested version ${version}; pass --allow-untested to override, or add it to versions.json after verifying`);
 }
 
 /* ------------------------------------------------------------------- patch */
@@ -194,7 +339,7 @@ function patchMain(file: string): void {
   const inject = `${MAIN_MARKER} try { require(process.env.NEST_MOD_LOADER || ${JSON.stringify(LOADER_MAIN)}); } catch (e) { console.error("[usermod] loader failed to start", e); }`;
   let updated: string;
   if (source.includes(MAIN_MARKER)) {
-    updated = source.replace(new RegExp(`${MAIN_MARKER.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}[^\r\n]*`), () => inject);
+    updated = source.replace(new RegExp(`${escapeRegExp(MAIN_MARKER)}[^\r\n]*`), () => inject);
     step(updated === source ? "main process already patched" : "updated main process loader path");
   } else {
     updated = source.startsWith('"use strict";') ? `"use strict";\n${inject}${source.slice('"use strict";'.length)}` : `${inject}\n${source}`;
@@ -246,8 +391,10 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   const loaderMatch = /NEST_MOD_LOADER \|\| ("(?:[^"\\]|\\.)*")/.exec(installedMain);
   const installedLoader = installedPatched && loaderMatch ? (JSON.parse(loaderMatch[1]!) as string) : null;
   const loaderMatches = installedLoader !== null && installedLoader.toLowerCase() === LOADER_MAIN.toLowerCase();
-  if (!buildOnly && stamp && stamp.packedSha === currentSha && loaderMatches && !options.force) {
-    ok(`Installed app.asar already carries this loader (sha ${currentSha.slice(0, 12)}). Use --force to rebuild.`);
+  const flags = await resolveFlags(options, stamp);
+  const flagsMatch = BUILD_OPTIONS.every((o) => (stamp?.flags?.[o.id] ?? false) === flags[o.id]);
+  if (!buildOnly && stamp && stamp.packedSha === currentSha && loaderMatches && flagsMatch && !options.force) {
+    ok(`Installed app.asar already carries this loader and these build options (sha ${currentSha.slice(0, 12)}). Use --force to rebuild.`);
     return;
   }
   let sourceAsar = asar;
@@ -270,8 +417,12 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
     for (const missing of r.missingUnpacked) warn(`unpacked file missing: ${missing}`);
     console.log(`    ${r.packed} packed + ${r.unpacked} unpacked files, ${(r.bytes / 1024 / 1024).toFixed(1)} MB`);
   } else step("staging dir is current; skipping extraction");
+  const version = readJson<{ version?: string }>(path.join(STAGING_DIR, "package.json"), {}).version ?? "?";
+  await checkVersion(version, options);
 
-  patchMain(path.join(STAGING_DIR, "out", "main", "index.js"));
+  const mainFile = path.join(STAGING_DIR, "out", "main", "index.js");
+  patchMain(mainFile);
+  patchBuildOptions(mainFile, flags);
   patchPreload(path.join(STAGING_DIR, "out", "preload", "index.js"));
   patchCsp(path.join(STAGING_DIR, "out", "renderer", "index.html"));
 
@@ -279,8 +430,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   const packed = asarLib.pack(sourceAsar, STAGING_DIR, PACKED_ASAR);
   console.log(`    ${packed.files} files, ${(packed.payloadBytes / 1024 / 1024).toFixed(1)} MB payload -> ${PACKED_ASAR}`);
   const packedSha = sha256(PACKED_ASAR);
-  writeText(STAMP_FILE, JSON.stringify({ sourceSha, packedSha, builtAt: new Date().toISOString() } satisfies Stamp, null, 2));
-  const version = readJson<{ version?: string }>(path.join(STAGING_DIR, "package.json"), {}).version ?? "?";
+  writeText(STAMP_FILE, JSON.stringify({ sourceSha, packedSha, builtAt: new Date().toISOString(), flags } satisfies Stamp, null, 2));
   if (buildOnly) {
     ok(`Built ${PACKED_ASAR} for Nest Studio ${version} (not installed).`);
     return;
@@ -294,6 +444,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   }
   step("installing patched archive");
   fs.copyFileSync(PACKED_ASAR, asar);
+  writeText(FLAGS_FILE, JSON.stringify({ appVersion: version, installedAt: new Date().toISOString(), flags }, null, 2));
   const staleDir = path.join(resources, "app");
   if (fs.existsSync(path.join(staleDir, ".usermod-stamp.json"))) {
     step("removing stale resources\\app directory from the earlier install method");
@@ -302,6 +453,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   ok(`\nNest Studio ${version} is now patched for user mods.`);
   console.log(`  archive : ${asar}  (original kept at ${asarOrig})`);
   console.log(`  loader  : ${LOADER_MAIN}`);
+  console.log(`  options : ${BUILD_OPTIONS.map((o) => `${o.label}=${flags[o.id] ? "on" : "off"}`).join(", ")}`);
   console.log(`  log     : ${path.join(ROOT, "usermod.log")}`);
   console.log("Start Nest Studio normally. Re-run after any app update; --uninstall restores the original.");
 }
@@ -319,6 +471,7 @@ async function uninstall(options: Options): Promise<void> {
   }
   fs.copyFileSync(asarOrig, asar);
   fs.unlinkSync(asarOrig);
+  fs.rmSync(FLAGS_FILE, { force: true });
   ok("Restored original app.asar. Your mods in this repo are untouched.");
 }
 
@@ -331,9 +484,9 @@ async function menu(options: Options): Promise<void> {
     name: "action",
     message: `Nest Studio user mods  ${color(90, `(${options.installRoot}${installed ? ", loader installed" : ", not installed"})`)}`,
     choices: [
-      { title: installed ? "Re-install / update loader" : "Install loader", value: "install", description: "Rebuild app.asar with the loader (needs an elevated terminal)" },
-      { title: "Select mods", value: "select-mods", description: "Choose which mods are enabled (writes mods.json)" },
+      { title: installed ? "Re-install / update loader" : "Install loader", value: "install", description: "Rebuild app.asar with the loader and build options (needs an elevated terminal)" },
       { title: "Build only", value: "build-only", description: "Build build/app.asar without touching the install" },
+      { title: "Enable / disable mods", value: "select-mods", description: "Fallback for the in-app Mods… dialog, e.g. to switch off a mod that breaks the UI" },
       { title: "Uninstall", value: "uninstall", description: "Restore the original app.asar", disabled: !installed },
       { title: "Exit", value: "exit" }
     ]
@@ -349,7 +502,11 @@ async function menu(options: Options): Promise<void> {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (process.platform !== "win32") warn("Nest Studio user mods target Windows; paths and process checks assume it.");
+  if (applyModFlags(options) && options.action === "menu") return;
   switch (options.action) {
+    case "select-mods":
+      await selectMods();
+      break;
     case "menu":
       await menu(options);
       break;
@@ -361,9 +518,6 @@ async function main(): Promise<void> {
       break;
     case "uninstall":
       await uninstall(options);
-      break;
-    case "select-mods":
-      await selectMods();
       break;
   }
 }

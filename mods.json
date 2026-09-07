@@ -1,7 +1,9 @@
 {
-  "disabled": [
-    "line-numbers",
-    "strip-comments"
+  "$comment": "Which mods are enabled is chosen inside Nest Studio: MODS menu -> Mods… . Core mods (mods-menu) always load. Settings blocks are edited by each mod's settings form or by hand.",
+  "enabled": [
+    "dark-mode",
+    "dev-shortcuts",
+    "mods-menu"
   ],
   "settings": {
     "program-header": {

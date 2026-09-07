@@ -49,6 +49,16 @@ const mod: Usermod.MainMod = {
       }
       return status;
     });
+    api.handle("tools:toggle-devtools", () => {
+      const win = api.getMainWindow();
+      if (!win) return { enabled: false, open: false, reason: "no window" };
+      const wasOpen = win.webContents.isDevToolsOpened();
+      win.webContents.toggleDevTools();
+      const open = win.webContents.isDevToolsOpened();
+      // With the app's default webPreferences.devTools=false the toggle is a no-op.
+      const enabled = open !== wasOpen;
+      return { enabled, open, reason: enabled ? undefined : "DevTools are disabled in this build; re-run the installer with --devtools" };
+    });
     api.handle("tools:tool-library", () => api.readStore().toolLibary?.cutLibrarySettings ?? []);
     api.log("app-tools active");
   }

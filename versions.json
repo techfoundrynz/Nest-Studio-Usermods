@@ -1,0 +1,11 @@
+{
+  "$comment": "Nest Studio versions the installer patches have been verified against. The installer warns and asks (or requires --allow-untested) for any other version. Add a version here after checking: app starts, MODS button appears, usermod.log shows the loader, DevTools/CAM-docs anchors still found.",
+  "tested": [
+    "1.1.0",
+    "1.1.1"
+  ],
+  "notes": {
+    "1.1.0": "Initial target. Electron 39.8.10.",
+    "1.1.1": "Auto-update on 2026-09-08. All patch anchors unchanged (OPEN_DEV_TOOLS, closeDevTools hook, CAM spawn env, preload, CSP)."
+  }
+}

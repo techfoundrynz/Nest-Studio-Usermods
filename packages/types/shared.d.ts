@@ -11,8 +11,22 @@ declare namespace Usermod {
   type IpcResult<T> = { ok: true; data: T } | { ok: false; message: string };
 
   interface Config {
-    disabled: string[];
+    /** Opt-in list of enabled mod names (mods.json "enabled"). Core mods load regardless. */
+    enabled: string[];
     settings: Record<string, Record<string, unknown> | undefined>;
+  }
+  type ModKind = "postprocessor" | "main" | "ui";
+  /** Every mod package found under mods/, enabled or not. */
+  interface AvailableMod {
+    name: string;
+    description: string;
+    kinds: ModKind[];
+    order: number;
+    enabled: boolean;
+    /** Always loaded and not user-toggleable (e.g. mods-menu). */
+    core: boolean;
+    /** Runtime pieces already active for this mod (main mods stay active until restart). */
+    active: { main: boolean; postprocessor: boolean };
   }
 
   interface PostprocessorSummary {
@@ -48,7 +62,10 @@ declare namespace Usermod {
     postprocessors: PostprocessorSummary[];
     mainMods: MainModSummary[];
     uiMods: UiModEntry[];
+    available: AvailableMod[];
     errors: LoaderError[];
+    /** Build options the installer baked into the installed archive (build/flags.json), if known. */
+    buildFlags?: { appVersion?: string; installedAt?: string; flags: Record<string, boolean> };
   }
 
   /** Context a caller may supply when running the chain manually. */
@@ -72,6 +89,9 @@ declare namespace Usermod {
     runPostprocessors(stage: Stage, gcode: string, ctx?: RunContextInput): Promise<IpcResult<string>>;
     /** Replace one mod's block in mods.json "settings" and reload the config. */
     setSettings(modName: string, settings: Record<string, unknown>): Promise<IpcResult<Config>>;
+    /** Replace mods.json "enabled"; post-processors reload and newly enabled main mods activate at once,
+     * UI mods need a renderer reload, disabled main mods stop at the next app start. */
+    setEnabled(names: string[]): Promise<IpcResult<Info>>;
   }
 
   /* ------------------------------------------------------------ renderer runtime */

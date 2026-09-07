@@ -26,8 +26,10 @@ settings) and loads them in `order`. Types come from `@neststudio-usermods/types
 ```
 
 Any combination of `postprocessor`, `main` and `ui` entries is allowed. `order` sorts post-processors
-(execution order) and UI mods (injection order); lower runs first, default 100. Settings live in the
-repo's `mods.json` under `settings.<name>`; the installer's "Select mods" maintains `disabled`.
+(execution order) and UI mods (injection order); lower runs first, default 100. `core: true` marks a mod
+that always loads and cannot be switched off (only `mods-menu`). Mods are opt-in: the loader loads those
+named in `mods.json` `enabled`, which the in-app Mods… dialog (or the installer's CLI fallback) writes.
+Settings live in `mods.json` under `settings.<name>`.
 
 ## Post-processors (main process)
 
@@ -101,7 +103,10 @@ const handle = ui.toolbar.addButton({ id: "hello", title: "Hello", icon: ui.icon
 
 `info()`, `invoke<T>(channel, ...args)`, `on<T>(channel, cb)`, `readFile(rel)`, `writeFile(rel, text)`
 (confined to `data/`), `log(level, ...)`, `reload()`, `openModDir()`, `runPostprocessors(stage, gcode, ctx)`,
-`setSettings(modName, settings)` (rewrites that mod's block in `mods.json`).
+`setSettings(modName, settings)` (rewrites that mod's block in `mods.json`), `setEnabled(names)` (rewrites
+`enabled`; post-processors reload and newly enabled main mods activate immediately).
+`info()` includes `available` (every mod package with `enabled`, `core`, `kinds`) and `buildFlags` (which
+installer build options the installed archive carries).
 Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: false, message }`.
 
 ### `window.api` (`NestStudio.Api`, the subset that is typed)

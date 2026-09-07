@@ -5,7 +5,10 @@
   "license": "GPL-3.0-only",
   "description": "User-mod loader, installer and bundled mods for Nest Studio (Nestworks desktop CNC software)",
   "packageManager": "pnpm@11.15.1",
-  "engines": { "node": ">=20", "pnpm": ">=10" },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
   "scripts": {
     "build": "pnpm --filter \"./packages/**\" --filter \"./mods/**\" run build",
     "watch": "concurrently -n loader,mods -c cyan,green \"pnpm --filter @neststudio-usermods/loader run watch\" \"pnpm --filter \\\"./mods/**\\\" --parallel run watch\"",

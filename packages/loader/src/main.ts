@@ -27,6 +27,7 @@ interface Manifest {
   dir: string;
   description: string;
   order: number;
+  core: boolean;
   postprocessor?: string;
   ui?: string;
   main?: string;
@@ -48,7 +49,7 @@ interface LoaderState {
   errors: Usermod.LoaderError[];
 }
 const state: LoaderState = {
-  config: { disabled: [], settings: {} },
+  config: { enabled: [], settings: {} },
   manifests: [],
   postprocessors: [],
   mainMods: [],
@@ -99,14 +100,15 @@ function loadConfig(): Usermod.Config {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const parsed: unknown = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-      const disabled = isRecord(parsed) && Array.isArray(parsed.disabled) ? parsed.disabled.filter((d): d is string => typeof d === "string") : [];
+      const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((d): d is string => typeof d === "string") : []);
+      const enabled = isRecord(parsed) && Array.isArray(parsed.enabled) ? names(parsed.enabled) : [];
       const settings: Usermod.Config["settings"] = {};
       if (isRecord(parsed) && isRecord(parsed.settings)) {
         for (const [key, value] of Object.entries(parsed.settings)) {
           if (isRecord(value)) settings[key] = value;
         }
       }
-      state.config = { disabled, settings };
+      state.config = { enabled, settings };
     }
   } catch (error) {
     recordError("config", error);
@@ -131,6 +133,7 @@ function readManifest(dir: string): Manifest | null {
     dir,
     description: typeof m.description === "string" ? m.description : typeof pkg.description === "string" ? pkg.description : "",
     order: typeof m.order === "number" ? m.order : 100,
+    core: m.core === true,
     ...(entry("postprocessor") ? { postprocessor: entry("postprocessor") } : {}),
     ...(entry("ui") ? { ui: entry("ui") } : {}),
     ...(entry("main") ? { main: entry("main") } : {})
@@ -157,8 +160,22 @@ function discoverManifests(): Manifest[] {
   state.manifests = found;
   return found;
 }
+function isEnabled(manifest: Manifest): boolean {
+  return manifest.core || state.config.enabled.includes(manifest.name);
+}
 function enabledManifests(): Manifest[] {
-  return state.manifests.filter((m) => !state.config.disabled.includes(m.name));
+  return state.manifests.filter(isEnabled);
+}
+function availableMods(): Usermod.AvailableMod[] {
+  return state.manifests.map((m) => ({
+    name: m.name,
+    description: m.description,
+    kinds: (["postprocessor", "main", "ui"] as const).filter((k) => Boolean(m[k])),
+    order: m.order,
+    enabled: isEnabled(m),
+    core: m.core,
+    active: { main: state.mainMods.some((x) => x.name === m.name), postprocessor: state.postprocessors.some((p) => p.name === m.name) }
+  }));
 }
 function freshRequire(file: string): unknown {
   delete require.cache[require.resolve(file)];
@@ -348,9 +365,10 @@ function createModApi(name: string): Usermod.MainModApi {
 function isMainMod(value: unknown): value is Usermod.MainMod {
   return isRecord(value) && typeof value.activate === "function";
 }
+/** Activates enabled main mods that are not active yet (safe to call again after set-enabled). */
 function loadMainMods(): void {
   for (const manifest of enabledManifests()) {
-    if (!manifest.main) continue;
+    if (!manifest.main || state.mainMods.some((m) => m.name === manifest.name)) continue;
     try {
       if (!fs.existsSync(manifest.main)) throw new Error(`not built: ${manifest.main}`);
       const mod = freshRequire(manifest.main);
@@ -395,8 +413,27 @@ function resolveInside(relPath: unknown, root: string): string {
   }
   return resolved;
 }
+function readBuildFlags(): Usermod.Info["buildFlags"] {
+  try {
+    const file = path.join(ROOT_DIR, "build", "flags.json");
+    if (!fs.existsSync(file)) return undefined;
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!isRecord(parsed) || !isRecord(parsed.flags)) return undefined;
+    const flags: Record<string, boolean> = {};
+    for (const [key, value] of Object.entries(parsed.flags)) flags[key] = value === true;
+    return {
+      ...(typeof parsed.appVersion === "string" ? { appVersion: parsed.appVersion } : {}),
+      ...(typeof parsed.installedAt === "string" ? { installedAt: parsed.installedAt } : {}),
+      flags
+    };
+  } catch {
+    return undefined;
+  }
+}
 function getInfo(): Usermod.Info {
+  const buildFlags = readBuildFlags();
   return {
+    ...(buildFlags ? { buildFlags } : {}),
     loaderVersion: LOADER_VERSION,
     modDir: ROOT_DIR,
     distDir: MODS_DIR,
@@ -406,6 +443,7 @@ function getInfo(): Usermod.Info {
     postprocessors: state.postprocessors.map((p) => ({ name: p.name, file: p.file, stages: p.stages, description: p.description })),
     mainMods: state.mainMods,
     uiMods: listUiMods().filter((entry) => !entry.builtin),
+    available: availableMods(),
     errors: state.errors
   };
 }
@@ -433,19 +471,38 @@ function registerLoaderIpc(): void {
     loadPostprocessors();
     return getInfo();
   });
+  const readConfigFile = (): Record<string, unknown> => {
+    const raw: unknown = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) : {};
+    return isRecord(raw) ? raw : {};
+  };
+  const writeConfigFile = (file: Record<string, unknown>): void => {
+    if (!Array.isArray(file.enabled)) file.enabled = [];
+    if (!isRecord(file.settings)) file.settings = {};
+    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+    loadConfig();
+  };
   define("set-settings", (modName: unknown, settings: unknown) => {
     if (typeof modName !== "string" || !/^[a-z0-9][a-z0-9._-]*$/i.test(modName)) throw new Error("invalid mod name");
     if (!isRecord(settings)) throw new Error("settings must be an object");
-    const raw: unknown = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) : {};
-    const file: Record<string, unknown> = isRecord(raw) ? raw : {};
+    const file = readConfigFile();
     const all = isRecord(file.settings) ? file.settings : {};
     all[modName] = settings;
     file.settings = all;
-    if (!Array.isArray(file.disabled)) file.disabled = [];
-    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-    loadConfig();
+    writeConfigFile(file);
     log("info", `settings saved for ${modName}`);
     return state.config;
+  });
+  define("set-enabled", (names: unknown) => {
+    if (!Array.isArray(names) || !names.every((n): n is string => typeof n === "string" && /^[a-z0-9][a-z0-9._-]*$/i.test(n))) throw new Error("enabled must be an array of mod names");
+    const known = new Set(state.manifests.map((m) => m.name));
+    const file = readConfigFile();
+    file.enabled = [...new Set(names.filter((n) => known.has(n)))].sort();
+    writeConfigFile(file);
+    discoverManifests();
+    loadPostprocessors();
+    loadMainMods();
+    log("info", `enabled mods: ${(file.enabled as string[]).join(", ") || "(none)"}`);
+    return getInfo();
   });
   define("open-mod-dir", () => shell.openPath(ROOT_DIR));
   define("run-postprocessors", (stage: unknown, gcode: unknown, ctx: unknown) => {

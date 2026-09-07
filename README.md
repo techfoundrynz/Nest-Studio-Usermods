@@ -27,10 +27,22 @@ pnpm install
 pnpm run install:app          # interactive menu; the final copy step needs an elevated terminal
 ```
 
-The menu offers **Install / re-install**, **Select mods**, **Build only** and **Uninstall**. Under the
-hood the installer builds the workspace, extracts `resources\app.asar` into `build\app`, applies three
-marker-based patches, repacks to `build\app.asar`, backs up the original as `resources\app.asar.orig`,
-and copies the patched archive into place. Nest Studio must be closed for the copy.
+The menu offers **Install / re-install**, **Build only**, **Enable / disable mods** and **Uninstall**.
+Under the hood the installer builds the workspace, extracts `resources\app.asar` into `build\app`,
+applies marker-based patches, verifies the patched main script still parses, repacks to
+`build\app.asar`, backs up the original as `resources\app.asar.orig`, and copies the patched archive
+into place. Nest Studio must be closed for the copy.
+
+**Choosing mods.** Everything except the MODS menu itself is off after install. Open the MODS menu in
+the app and click **Mods…** to switch mods on; post-processors apply immediately, UI mods after "Save and
+reload UI", and switched-off main mods stop at the next app start. The CLI is the fallback if a mod ever
+breaks the UI: `pnpm run mods` (picker), or `pnpm run install:app -- --disable-mods=a,b`,
+`--enable-mods=a,b`, `--disable-all-mods`. These only edit `mods.json`; no rebuild needed.
+
+**Versions.** `versions.json` lists the Nest Studio versions the patches have been verified against. For
+any other version the installer warns and asks (non-interactive runs need `--allow-untested`). Patches
+are anchor-based and a parse check guards the main script, so new versions usually just work; add them
+to the file once confirmed.
 
 Non-interactive equivalents:
 
@@ -38,8 +50,13 @@ Non-interactive equivalents:
 | --- | --- |
 | `pnpm run install:app -- --install` | install, or re-install after an app update (no-op if current) |
 | `pnpm run install:app -- --install --force` | rebuild even if current |
+| `pnpm run install:app -- --install --devtools` | build option: re-enable Chromium DevTools (the app ships with them off); `F12` or MODS ▸ Developer toggles them |
+| `pnpm run install:app -- --install --cam-docs` | build option: start the CAM service with `ENABLE_DOCS=1` so Swagger is at `127.0.0.1:9630/docs` |
+
+Build options are baked into the patched archive. The interactive install asks for them; `--no-devtools` /
+`--no-cam-docs` turn them off again. The MODS panel shows which ones the installed build carries.
 | `pnpm run build:asar` | build `build\app.asar` without touching the install (no admin) |
-| `pnpm run mods` | choose enabled mods (writes `mods.json`) |
+| `pnpm run mods` | CLI fallback for enabling/disabling mods (writes `mods.json`) |
 | `pnpm run uninstall:app` | restore `app.asar.orig` |
 | `tools\install.ps1 [args]` | thin PowerShell wrapper for elevated shells |
 
@@ -73,7 +90,9 @@ Each mod is a package whose `package.json` carries a `usermod` manifest:
 ```
 
 Keys: `postprocessor`, `ui`, `main` (entry files, any combination), `order` (load/run order, default 100),
-`name`, `description`. The loader discovers every `mods/*/package.json` with a manifest at startup.
+`name`, `description`, `core` (always on, not user-toggleable; only `mods-menu` uses it). The loader
+discovers every `mods/*/package.json` with a manifest at startup and loads those listed in `mods.json`
+`enabled`.
 
 ## Bundled mods
 
@@ -92,10 +111,10 @@ Keys: `postprocessor`, `ui`, `main` (entry files, any combination), `order` (loa
 | `dark-mode` | ui | Sun/moon toolbar button that switches Nest Studio's built-in dark theme; optional follow-OS setting |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via chain |
 | `app-tools` | ui + main | Open app logs / user data / usermod.log, CAM service status, open API docs |
-| `dev-shortcuts` | ui | `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log |
+| `dev-shortcuts` | ui | `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log, `F12` DevTools |
 
-Post-processor and `mods.json` changes apply after "Reload post-processors" in the MODS panel; UI and
-main mods need an app restart (or `Ctrl+Shift+R` for UI mods).
+All of these start switched off; enable them from MODS ▸ Mods…. Settings changes apply after "Reload
+post-processors" in the MODS panel; UI mods after a UI reload (`Ctrl+Shift+R`), main mods at app start.
 
 ## Development
 

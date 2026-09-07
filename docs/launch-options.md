@@ -20,7 +20,7 @@ $env:ENABLE_DOCS = '1'; & 'C:\Program Files\nest-studio\nest-studio.exe'
 
 | Variable | Consumer | Effect | Status |
 | --- | --- | --- | --- |
-| `ENABLE_DOCS=1` | CAM service | Enables Swagger UI at `http://127.0.0.1:9630/docs` and the spec at `/swagger.json`. Default off (`APP_ENV` is hardcoded `PRO`). | verified |
+| `ENABLE_DOCS=1` | CAM service | Enables Swagger UI at `http://127.0.0.1:9630/docs` and the spec at `/swagger.json`. Default off (`APP_ENV` is hardcoded `PRO`). The installer's `--cam-docs` build option injects it into the service's environment permanently. | verified |
 | `NEST_MOD_LOADER=<path>` | user-mod patch in `out/main/index.js` | Overrides which `loader\main.js` the patched app requires. Useful for testing a copy. | verified |
 | `NEST_FORCE_UPDATE_CHECK=1` | app main | Allows update checks when the app is not packaged (dev builds only). | inferred |
 | `ELECTRON_RENDERER_URL` | app main | Dev-mode renderer URL; only honoured when `is.dev`. Packaged builds ignore it. | inferred |
@@ -38,7 +38,7 @@ $env:ENABLE_DOCS = '1'; & 'C:\Program Files\nest-studio\nest-studio.exe'
 | --- | --- | --- |
 | `neststudio://open?params=<url-encoded JSON>` | Deep link. Route must be `open`; `params` must be a JSON object with a `fileUrl` on an allow-listed host (community model hosts) or a `/NestStudioModel/` path. Also registered as a protocol handler, so a second instance forwards it to the running app and exits silently. | verified (parsing read; forwarding exercised) |
 | `--inspect=9229`, `--inspect-brk` | Node inspector for the **main** process (fuse `EnableNodeCliInspectArguments` enabled). Attach with `chrome://inspect`. | inferred from fuses |
-| `--remote-debugging-port`, `--remote-debugging-pipe` | Removed by the app at startup (`installDevToolsPolicy`), and DevTools are force-closed when opened. Renderer DevTools need a patched `OPEN_DEV_TOOLS` constant in `out/main/index.js`. | verified in code |
+| `--remote-debugging-port`, `--remote-debugging-pipe` | Removed by the app at startup (`installDevToolsPolicy`), DevTools are force-closed when opened, and Ctrl+Shift+I is swallowed. The installer's `--devtools` flag patches `OPEN_DEV_TOOLS` and the close hook; then `F12` (dev-shortcuts mod) or MODS ▸ Developer ▸ Toggle DevTools opens them. | verified in code |
 | `--js-flags=--max-old-space-size=8192`, `--enable-gpu-rasterization`, `--ignore-gpu-blocklist` | Appended by the app itself; shown so you know the baseline. Other Chromium switches you pass on the command line are honoured by Electron as usual. | verified in code |
 
 ## Ports
@@ -67,6 +67,16 @@ $env:ENABLE_DOCS = '1'; & 'C:\Program Files\nest-studio\nest-studio.exe'
 | `%LOCALAPPDATA%\@nestdesktop-updater\` | Downloaded update installers. |
 | `resources\app-update.yml` | Update feed (`generic` provider). The code builds its own feed URL from `AUTO_UPDATE_FEED_ROOT`/`prod/win`. |
 | `resources\store.json` | Template store used to seed a fresh user store. |
+
+## Build constants in `out/main/index.js` (1.1.x)
+
+| Constant | Shipped value | Effect in the packaged app |
+| --- | --- | --- |
+| `OPEN_DEV_TOOLS` | `false` | `webPreferences.devTools` for every window. Installer build option `--devtools` flips it and disarms the close hook. |
+| `OPEN_SERVER` | `false` | Only read as `isPackaged \|\| OPEN_SERVER`: whether Electron spawns the CAM service when running unpackaged. Always true in the installed app; nothing to gain. |
+| `START_UP_LOADING` | `true` | Only read as `isPackaged \|\| START_UP_LOADING`: shows the loading window. Always true in the installed app. |
+| `BUILD_NODE_ENV` | `"prod"` | Folder of the auto-update feed (`<root>/prod/win`). Left alone: other values point at unknown feeds. |
+| `CAM_HTTP_PORT` | `9630` | Hardcoded on both sides (the service binds it too); not changeable from the app alone. |
 
 ## Electron fuses (as shipped)
 

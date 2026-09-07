@@ -70,6 +70,18 @@ void (async () => {
   const sep = path.sep;
   const downloads = `${path.dirname(USER_DATA)}${sep}Downloads${sep}`;
 
+  // mods.json ships with nothing enabled; enable the bundled set for the test and restore the file afterwards.
+  const configPath = path.join(loader.ROOT_DIR, "mods.json");
+  const originalConfig = fs.readFileSync(configPath, "utf8");
+  const restoreConfig = (): void => fs.writeFileSync(configPath, originalConfig, "utf8");
+  process.on("exit", restoreConfig);
+  const initial = data(await invoke<Usermod.Info>("usermod:info"));
+  check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
+  const enabledSet = initial.available.filter((m) => !m.core && !["strip-comments", "line-numbers"].includes(m.name)).map((m) => m.name);
+  const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 6 && enabledInfo.mainMods.length === 2, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
+
   let written: { filePath: string; data: string } | null = null;
   fakeElectron.ipcMain.handle("store:write-file", (_e, filePath, d) => {
     written = { filePath: String(filePath), data: String(d) };
@@ -116,7 +128,8 @@ void (async () => {
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
   check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
-  check("disabled mods (mods.json) not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
+  check("mods left out of enabled are not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
+  check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "strip-comments")?.enabled === false && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
   check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier"]), info.mainMods.map((m) => m.name).join(","));
   check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
 
@@ -136,13 +149,10 @@ void (async () => {
   check("ui-kit injected second", ui[1]?.name === "ui-kit" && ui[1].builtin === true && fs.existsSync(ui[1].file), ui[1]?.url);
   check("ui mod urls point at built dist files", ui.slice(2).every((m) => m.url.includes("/mods/") && m.url.endsWith(".js") && fs.existsSync(m.file)));
 
-  const before = fs.readFileSync(path.join(loader.ROOT_DIR, "mods.json"), "utf8");
   const saved = data(await invoke<Usermod.Config>("usermod:set-settings", "dark-mode", { followSystem: true }));
-  check("set-settings updates config", saved.settings["dark-mode"]?.followSystem === true && fs.readFileSync(path.join(loader.ROOT_DIR, "mods.json"), "utf8").includes('"followSystem": true'));
+  check("set-settings updates config", saved.settings["dark-mode"]?.followSystem === true && fs.readFileSync(configPath, "utf8").includes('"followSystem": true'));
   const badName = await invoke("usermod:set-settings", "../evil", {});
   check("set-settings rejects bad names", !badName.ok);
-  fs.writeFileSync(path.join(loader.ROOT_DIR, "mods.json"), before, "utf8");
-  await invoke("usermod:reload");
 
   check("read-file inside repo", data(await invoke<string>("usermod:read-file", "mods.json")).includes("settings"));
   const esc = await invoke("usermod:read-file", `..${sep}store.json`);
@@ -155,6 +165,8 @@ void (async () => {
 
   const ping = data(await invoke<{ pong: unknown; appVersion: string }>("usermod:tools:ping", "yo"));
   check("app-tools ping", ping.pong === "yo" && ping.appVersion === "1.1.0-test");
+  const dt = data(await invoke<{ enabled: boolean; reason?: string }>("usermod:tools:toggle-devtools"));
+  check("toggle-devtools reports unavailable without a window", dt.enabled === false && dt.reason === "no window");
   const bad = await invoke("usermod:tools:open-url", "https://example.com");
   check("open-url rejects non-loopback", !bad.ok && /loopback/.test(bad.message));
   const good = await invoke("usermod:tools:open-url", "http://127.0.0.1:9630/docs");
@@ -165,7 +177,7 @@ void (async () => {
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
   check("reload ok", rl.postprocessors.length === 6);
 
-  const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
+  const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings|set-enabled)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
   check("no unexpected loader errors", noise.length === 0, JSON.stringify(noise));
   console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
   process.exit(failures ? 1 : 0);
