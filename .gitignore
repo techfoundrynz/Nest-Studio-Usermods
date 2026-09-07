@@ -1,0 +1,13 @@
+# build output of tools/install.ps1 (extracted app + repacked archive, ~530 MB)
+build/
+
+# runtime artifacts
+usermod.log
+usermod.log.*
+data/*
+!data/.gitkeep
+
+# editor / OS noise
+.vscode/
+Thumbs.db
+*.tmp
