@@ -78,7 +78,8 @@ mods/
   strip-comments, line-numbers                                                              (post-processors)
   mods-menu, dark-mode, gcode-lab, dev-shortcuts                                            (UI)
   app-tools, job-notifier                                                                   (main + UI)
-mods.json      disabled list + per-mod settings (edited by "Select mods")
+mods.default.json   tracked template: enabled list (empty) + default settings
+mods.json           per-machine copy (git-ignored), created from the template on first run, edited by Mods… / settings forms
 docs/          launch-options.md, architecture.md, mod-api.md
 build/, data/, usermod.log, **/dist   generated, git-ignored
 ```

@@ -20,6 +20,8 @@ const MODS_DIR = path.join(ROOT_DIR, "mods");
 const DATA_DIR = path.join(ROOT_DIR, "data");
 const LOG_FILE = path.join(ROOT_DIR, "usermod.log");
 const CONFIG_FILE = path.join(ROOT_DIR, "mods.json");
+/** Tracked template; mods.json itself is per machine and git-ignored. */
+const CONFIG_DEFAULT_FILE = path.join(ROOT_DIR, "mods.default.json");
 const GCODE_EXT = /\.(nc|gcode|tap|ngc|cnc)$/i;
 
 interface Manifest {
@@ -98,6 +100,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 function loadConfig(): Usermod.Config {
   try {
+    if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(CONFIG_DEFAULT_FILE)) {
+      fs.copyFileSync(CONFIG_DEFAULT_FILE, CONFIG_FILE);
+      log("info", "created mods.json from mods.default.json");
+    }
     if (fs.existsSync(CONFIG_FILE)) {
       const parsed: unknown = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
       const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((d): d is string => typeof d === "string") : []);

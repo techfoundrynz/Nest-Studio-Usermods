@@ -220,7 +220,9 @@ interface ModInfo {
   core: boolean;
   enabled: boolean;
 }
+const CONFIG_DEFAULT_FILE = path.join(ROOT, "mods.default.json");
 function readConfigFile(): Record<string, unknown> {
+  if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(CONFIG_DEFAULT_FILE)) fs.copyFileSync(CONFIG_DEFAULT_FILE, CONFIG_FILE);
   const raw = readJson<unknown>(CONFIG_FILE, {});
   return typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 }

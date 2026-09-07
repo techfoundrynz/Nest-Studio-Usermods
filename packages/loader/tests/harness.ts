@@ -50,6 +50,16 @@ moduleInternals._load = function (this: unknown, request: string, ...rest: unkno
   return request === "electron" ? fakeElectron : originalLoad.call(this, request, ...rest);
 };
 
+// Test against a fresh copy of mods.default.json, never the developer's own mods.json; restore on exit.
+const rootDir = path.resolve(__dirname, "..", "..", "..", "..");
+const configPath = path.join(rootDir, "mods.json");
+const originalConfig = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
+fs.copyFileSync(path.join(rootDir, "mods.default.json"), configPath);
+process.on("exit", () => {
+  if (originalConfig === null) fs.rmSync(configPath, { force: true });
+  else fs.writeFileSync(configPath, originalConfig, "utf8");
+});
+
 const loader = require(path.join(__dirname, "..", "main.js")) as { ROOT_DIR: string };
 const invoke = <T = unknown>(channel: string, ...args: unknown[]): Promise<Usermod.IpcResult<T>> => {
   const handler = handlers.get(channel);
@@ -70,11 +80,8 @@ void (async () => {
   const sep = path.sep;
   const downloads = `${path.dirname(USER_DATA)}${sep}Downloads${sep}`;
 
-  // mods.json ships with nothing enabled; enable the bundled set for the test and restore the file afterwards.
-  const configPath = path.join(loader.ROOT_DIR, "mods.json");
-  const originalConfig = fs.readFileSync(configPath, "utf8");
-  const restoreConfig = (): void => fs.writeFileSync(configPath, originalConfig, "utf8");
-  process.on("exit", restoreConfig);
+  // mods.default.json ships with nothing enabled; enable the bundled set for the rest of the run.
+  check("loader root matches the repo root", path.resolve(loader.ROOT_DIR) === rootDir, loader.ROOT_DIR);
   const initial = data(await invoke<Usermod.Info>("usermod:info"));
   check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
   const enabledSet = initial.available.filter((m) => !m.core && !["strip-comments", "line-numbers"].includes(m.name)).map((m) => m.name);
