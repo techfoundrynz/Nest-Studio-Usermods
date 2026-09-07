@@ -37,6 +37,8 @@ interface UsermodCameraLike {
   fov: number;
   zoom: number;
   aspect: number;
+  near: number;
+  far: number;
   position: UsermodVector3Like;
   up: UsermodVector3Like;
   quaternion: UsermodQuaternionLike;
@@ -47,6 +49,8 @@ interface UsermodCameraControllerLike {
   camera: UsermodCameraLike;
   target: UsermodVector3Like;
   distance: number;
+  /** Wheel zoom clamps distance to [minDistance, maxDistance]. */
+  config: { distance: number; minDistance: number; maxDistance: number };
   viewQuat: UsermodQuaternionLike;
   updateCamera(): void;
   saveState(): void;

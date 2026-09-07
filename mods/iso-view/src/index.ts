@@ -22,7 +22,14 @@
   });
 
   /** Per-manager memory of the perspective state we replaced. */
-  const saved = new WeakMap<UsermodSceneManagerLike, { fov: number; distance: number }>();
+  interface SavedView {
+    fov: number;
+    near: number;
+    far: number;
+    minDistance: number;
+    maxDistance: number;
+  }
+  const saved = new WeakMap<UsermodSceneManagerLike, SavedView>();
 
   function activeManager(): UsermodSceneManagerLike | null {
     const managers = globalThis.__usermodSceneManagers;
@@ -49,19 +56,35 @@
     c.emit?.("change");
     manager.requestRender();
   }
+  /**
+   * A narrow FOV needs the camera ~9x further away for the same framing, so everything expressed as a
+   * distance has to scale with it: the controller's wheel-zoom clamp (min/maxDistance) and the camera's
+   * near/far planes. Otherwise iso mode can only zoom out to a ninth of the perspective range and the far
+   * plane clips the scene first.
+   */
   function setIso(manager: UsermodSceneManagerLike, on: boolean): void {
     const c = manager.cameraController;
     const camera = c.camera;
     const tan = (deg: number): number => Math.tan((deg * Math.PI) / 360);
     if (on && !saved.has(manager)) {
-      saved.set(manager, { fov: camera.fov, distance: c.distance });
-      c.distance = c.distance * (tan(camera.fov) / tan(isoFov));
+      const factor = tan(camera.fov) / tan(isoFov);
+      saved.set(manager, { fov: camera.fov, near: camera.near, far: camera.far, minDistance: c.config.minDistance, maxDistance: c.config.maxDistance });
+      c.config.minDistance *= factor;
+      c.config.maxDistance *= factor;
+      c.distance *= factor;
+      camera.near *= factor;
+      camera.far *= factor;
       camera.fov = isoFov;
       camera.updateProjectionMatrix();
       lookFrom(manager, [1, -1, 1]);
     } else if (!on && saved.has(manager)) {
       const prev = saved.get(manager)!;
-      c.distance = c.distance * (tan(camera.fov) / tan(prev.fov));
+      const factor = tan(camera.fov) / tan(prev.fov); // < 1: back to the perspective scale
+      c.config.minDistance = prev.minDistance;
+      c.config.maxDistance = prev.maxDistance;
+      c.distance = Math.min(prev.maxDistance, Math.max(prev.minDistance, c.distance * factor));
+      camera.near = prev.near;
+      camera.far = prev.far;
       camera.fov = prev.fov;
       camera.updateProjectionMatrix();
       c.updateCamera();
