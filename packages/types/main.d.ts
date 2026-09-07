@@ -35,8 +35,8 @@ declare namespace Usermod {
     process(gcode: string, ctx: PostprocessorContext<S>): PostprocessorResult | Promise<PostprocessorResult>;
   }
 
-  /** Handlers receive whatever the renderer passed; validate at the boundary. */
-  type IpcHandler = (...args: any[]) => unknown;
+  /** Handlers receive whatever the renderer passed (unknown); narrow at the boundary. */
+  type IpcHandler = (...args: unknown[]) => unknown;
 
   /** Events the loader emits to main mods (api.events.on). */
   interface LoaderEvents {

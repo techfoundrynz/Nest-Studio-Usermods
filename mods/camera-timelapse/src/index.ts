@@ -15,6 +15,7 @@ interface StreamEvent {
   base64?: string;
   payload?: { status?: string };
 }
+const isStreamEvent = (value: unknown): value is StreamEvent => typeof value === "object" && value !== null;
 
 const mod: Usermod.MainMod<{ intervalSeconds: number; source: string; onlyWhileRunning: boolean; maxFramesPerJob: number }> = {
   description: "Saves camera frames to data/timelapse while a job runs",
@@ -70,7 +71,7 @@ const mod: Usermod.MainMod<{ intervalSeconds: number; source: string; onlyWhileR
       contents.send = (channel: string, ...args: unknown[]) => {
         if (channel === "device:stream-event") {
           try {
-            onEvent((args[0] ?? {}) as StreamEvent);
+            if (isStreamEvent(args[0])) onEvent(args[0]);
           } catch (error) {
             api.warn(`event failed: ${error instanceof Error ? error.message : String(error)}`);
           }

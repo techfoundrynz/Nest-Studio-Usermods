@@ -18,7 +18,7 @@
     settings = { feed: Number(m.feed ?? 1500) || 1500, zFeed: Number(m.zFeed ?? 600) || 600, distance: Number(m.distance ?? 200) || 200, requireDeviceTab: m.requireDeviceTab !== false };
   });
 
-  const send = (payload: string): Promise<NestStudio.Result<unknown>> => (window.api.device.sendMessage as (m: { type: "text"; payload: string }) => Promise<NestStudio.Result<unknown>>)({ type: "text", payload });
+  const send = (payload: string): Promise<NestStudio.Result<unknown>> => window.api.device.sendMessage({ type: "text", payload });
   const AXES: Record<string, [axis: "X" | "Y" | "Z", sign: 1 | -1]> = {
     ArrowRight: ["X", 1],
     ArrowLeft: ["X", -1],
@@ -30,7 +30,7 @@
   let active: string | null = null;
   const typing = (): boolean => {
     const el = document.activeElement;
-    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable);
+    return el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
   };
   const onDevice = (): boolean => !settings.requireDeviceTab || window.location.hash.startsWith("#/device");
 

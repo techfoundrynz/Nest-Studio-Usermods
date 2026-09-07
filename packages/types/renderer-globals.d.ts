@@ -64,9 +64,10 @@ declare var __usermodSceneManagers: Set<UsermodSceneManagerLike> | undefined;
 
 /* Sandboxed preload environment (loader/preload.ts only): Electron exposes a restricted require. */
 interface PreloadIpcRenderer {
-  invoke(channel: string, ...args: unknown[]): Promise<unknown>;
-  on(channel: string, listener: (event: unknown, payload: unknown) => void): void;
-  removeListener(channel: string, listener: (event: unknown, payload: unknown) => void): void;
+  /** Electron's invoke resolves with whatever main returned; callers name the expected type. */
+  invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
+  on<T = unknown>(channel: string, listener: (event: unknown, payload: T) => void): void;
+  removeListener<T = unknown>(channel: string, listener: (event: unknown, payload: T) => void): void;
 }
 interface PreloadElectron {
   contextBridge: { exposeInMainWorld(key: string, api: unknown): void };

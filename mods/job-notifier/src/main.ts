@@ -33,6 +33,7 @@ interface StreamEvent {
   payload?: MachineStatus;
   phase?: string;
 }
+const isStreamEvent = (value: unknown): value is StreamEvent => typeof value === "object" && value !== null;
 interface JobState {
   phase: Phase;
   fileName: string | null;
@@ -156,7 +157,7 @@ const mod: Usermod.MainMod<Settings> = {
       const original = contents.send.bind(contents);
       contents.send = (channel: string, ...args: unknown[]) => {
         if (channel === "device:stream-event") {
-          const event = args[0] as StreamEvent | undefined;
+          const event = isStreamEvent(args[0]) ? args[0] : undefined;
           try {
             if (event?.type === "machine_status" && event.payload) onStatus(event.payload);
             else if (event?.type === "connection") job.connected = event.phase === "reconnected" || event.phase === "connected";

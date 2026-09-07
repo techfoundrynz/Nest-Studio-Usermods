@@ -221,10 +221,11 @@ interface ModInfo {
   enabled: boolean;
 }
 const CONFIG_DEFAULT_FILE = path.join(ROOT, "mods.default.json");
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 function readConfigFile(): Record<string, unknown> {
   if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(CONFIG_DEFAULT_FILE)) fs.copyFileSync(CONFIG_DEFAULT_FILE, CONFIG_FILE);
   const raw = readJson<unknown>(CONFIG_FILE, {});
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return isRecord(raw) ? raw : {};
 }
 function readEnabled(file: Record<string, unknown>): string[] {
   return Array.isArray(file.enabled) ? file.enabled.filter((d): d is string => typeof d === "string") : [];

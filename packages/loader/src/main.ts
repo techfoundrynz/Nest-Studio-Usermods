@@ -279,22 +279,32 @@ async function runPostprocessors(stage: Usermod.Stage, gcode: string, ctx: Userm
 
 /* ------------------------------------------------------------ event bus */
 type Listener<K extends keyof Usermod.LoaderEvents> = (payload: Usermod.LoaderEvents[K]) => void;
-const listeners = new Map<keyof Usermod.LoaderEvents, Set<Listener<keyof Usermod.LoaderEvents>>>();
+/** Homomorphic mapped type keeps each event's listener set precisely typed, no casts needed. */
+type ListenerSets = { [K in keyof Usermod.LoaderEvents]?: Set<Listener<K>> };
+const listeners: ListenerSets = {};
 function emit<K extends keyof Usermod.LoaderEvents>(event: K, payload: Usermod.LoaderEvents[K]): void {
-  for (const listener of listeners.get(event) ?? []) {
+  const set: Set<Listener<K>> | undefined = listeners[event];
+  for (const listener of set ?? []) {
     try {
-      (listener as Listener<K>)(payload);
+      listener(payload);
     } catch (error) {
       recordError(`event:${event}`, error);
     }
   }
 }
+/** Reads through a generic key are precise; writes are not assignable, so create via Object.assign. */
+function listenerSet<K extends keyof Usermod.LoaderEvents>(event: K): Set<Listener<K>> {
+  const existing: Set<Listener<K>> | undefined = listeners[event];
+  if (existing) return existing;
+  const created = new Set<Listener<K>>();
+  Object.assign(listeners, { [event]: created });
+  return created;
+}
 const events: Usermod.LoaderEventBus = {
-  on(event, listener) {
-    const set = listeners.get(event) ?? new Set();
-    set.add(listener as Listener<keyof Usermod.LoaderEvents>);
-    listeners.set(event, set);
-    return () => void set.delete(listener as Listener<keyof Usermod.LoaderEvents>);
+  on<K extends keyof Usermod.LoaderEvents>(event: K, listener: Listener<K>) {
+    const set = listenerSet(event);
+    set.add(listener);
+    return () => void set.delete(listener);
   }
 };
 const countLines = (text: string): number => (text.match(/\n/g)?.length ?? 0) + (text.endsWith("\n") ? 0 : 1);
@@ -571,7 +581,12 @@ function registerLoaderIpc(): void {
   });
   define("run-postprocessors", (stage: unknown, gcode: unknown, ctx: unknown) => {
     if (typeof gcode !== "string") throw new Error("gcode must be a string");
-    const input: Usermod.RunContextInput = isRecord(ctx) ? (ctx as Usermod.RunContextInput) : {};
+    const input: Usermod.RunContextInput = {};
+    if (isRecord(ctx)) {
+      if (typeof ctx.fileName === "string") input.fileName = ctx.fileName;
+      if (typeof ctx.filePath === "string") input.filePath = ctx.filePath;
+      if (typeof ctx.channel === "string") input.channel = ctx.channel;
+    }
     return runPostprocessors(stage === "send" ? "send" : "export", gcode, { ...input, internal: false });
   });
 }

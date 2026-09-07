@@ -127,7 +127,7 @@ void (async () => {
 
   let sent: Record<string, unknown> | null = null;
   fakeElectron.ipcMain.handle("device:send-gcode", (_e, options) => {
-    sent = options as Record<string, unknown>;
+    sent = typeof options === "object" && options !== null ? { ...(options as object) } : null;
     return { ok: true };
   });
   await invoke("device:send-gcode", { fileName: "a.nc", gcode, gcodeRunTime: 5 });

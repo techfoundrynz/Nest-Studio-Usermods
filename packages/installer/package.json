@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@neststudio-usermods/asar": "workspace:*",
-    "prompts": "^2.4.2"
+    "prompts": "2.4.2"
   },
   "devDependencies": {
-    "@types/prompts": "^2.4.9"
+    "@types/prompts": "2.4.9"
   }
 }

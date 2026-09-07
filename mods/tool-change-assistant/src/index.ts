@@ -39,8 +39,7 @@
     }
   }
   async function resume(): Promise<void> {
-    const send = window.api.device.sendMessage as (m: { type: "text"; payload: string }) => Promise<NestStudio.Result<unknown>>;
-    const r = await send({ type: "text", payload: settings.resumeCommand });
+    const r = await window.api.device.sendMessage({ type: "text", payload: settings.resumeCommand });
     if (!r.ok) throw new Error(r.message ?? r.code ?? "send failed");
     rt.toast("Resume sent", { kind: "success" });
     modal?.close();

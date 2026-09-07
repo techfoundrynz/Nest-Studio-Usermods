@@ -25,20 +25,21 @@
     if (!r.ok) return;
     const mine = r.data.config.settings["device-macros"] ?? {};
     confirmAll = mine.confirmAll === true;
-    macros = Array.isArray(mine.macros)
-      ? (mine.macros as unknown[]).flatMap((m) => {
-          if (typeof m !== "object" || m === null) return [];
-          const o = m as Record<string, unknown>;
-          const lines = Array.isArray(o.lines) ? o.lines.filter((l): l is string => typeof l === "string" && l.trim() !== "") : [];
-          return typeof o.name === "string" && lines.length ? [{ name: o.name, lines, confirm: o.confirm === true }] : [];
+    const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+    const raw: unknown = mine.macros;
+    macros = Array.isArray(raw)
+      ? raw.flatMap((m: unknown) => {
+          if (!isRecord(m)) return [];
+          const lines = Array.isArray(m.lines) ? m.lines.filter((l): l is string => typeof l === "string" && l.trim() !== "") : [];
+          return typeof m.name === "string" && lines.length ? [{ name: m.name, lines, confirm: m.confirm === true }] : [];
         })
       : [];
   }
 
   async function connected(): Promise<boolean> {
     try {
-      const r = (await (window.api.device.getStatus as () => Promise<NestStudio.Result<{ connected?: boolean }>>)()) as NestStudio.Result<{ connected?: boolean }>;
-      return r.ok && r.data?.connected === true;
+      const r = await window.api.device.getStatus();
+      return r.ok && r.data.connected === true;
     } catch {
       return false;
     }
@@ -48,9 +49,8 @@
       rt.toast("No machine connected", { kind: "warn" });
       return;
     }
-    const send = window.api.device.sendMessage as (m: { type: "text"; payload: string }) => Promise<NestStudio.Result<unknown>>;
     for (const line of macro.lines) {
-      const r = await send({ type: "text", payload: line });
+      const r = await window.api.device.sendMessage({ type: "text", payload: line });
       if (!r.ok) throw new Error(`${line}: ${r.message ?? r.code ?? "send failed"}`);
       await new Promise((resolve) => setTimeout(resolve, 60));
     }

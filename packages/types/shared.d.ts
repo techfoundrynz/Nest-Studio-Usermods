@@ -354,8 +354,25 @@ declare namespace NestStudio {
       showItemInFolder(filePath: string): Promise<Result<void>>;
       openExternal(url: string): Promise<Result<void>>;
     };
-    /** Device and other namespaces exist but are not typed here yet. */
-    device: Record<string, (...args: never[]) => unknown>;
+    device: DeviceApi;
     [namespace: string]: unknown;
+  }
+  /** Messages the app's device channel accepts (see preload device.sendMessage). */
+  type DeviceMessage = { type: "text"; payload: string } | { type: "webrtc"; payload: unknown } | { type: "image"; payload: string };
+  interface DeviceStatus {
+    connected: boolean;
+    connectionType?: string;
+    address?: string;
+  }
+  interface DeviceApi {
+    connect(options: { ipAddress: string; codeValue: string; connectionType?: string }): Promise<Result<unknown>>;
+    disconnect(): Promise<Result<unknown>>;
+    getStatus(): Promise<Result<DeviceStatus>>;
+    sendMessage(message: DeviceMessage): Promise<Result<unknown>>;
+    sendGcode(options: { fileName?: string; gcode: string; gcodeRunTime?: number; limitResult?: unknown }): Promise<Result<unknown>>;
+    sendLabCommand(command: string): Promise<Result<unknown>>;
+    getSerialPorts(): Promise<Result<unknown>>;
+    onStreamEvent(listener: (event: unknown) => void): () => void;
+    [other: string]: unknown;
   }
 }

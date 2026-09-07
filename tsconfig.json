@@ -1,0 +1,113 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./mods/app-tools/tsconfig.main.json"
+    },
+    {
+      "path": "./mods/app-tools/tsconfig.ui.json"
+    },
+    {
+      "path": "./mods/arc-fit/tsconfig.json"
+    },
+    {
+      "path": "./mods/camera-timelapse/tsconfig.json"
+    },
+    {
+      "path": "./mods/dark-mode/tsconfig.json"
+    },
+    {
+      "path": "./mods/dev-shortcuts/tsconfig.json"
+    },
+    {
+      "path": "./mods/device-macros/tsconfig.json"
+    },
+    {
+      "path": "./mods/export-copy/tsconfig.json"
+    },
+    {
+      "path": "./mods/export-filename/tsconfig.json"
+    },
+    {
+      "path": "./mods/export-report/tsconfig.main.json"
+    },
+    {
+      "path": "./mods/export-report/tsconfig.ui.json"
+    },
+    {
+      "path": "./mods/feed-override/tsconfig.json"
+    },
+    {
+      "path": "./mods/gcode-lab/tsconfig.json"
+    },
+    {
+      "path": "./mods/iso-view/tsconfig.json"
+    },
+    {
+      "path": "./mods/job-notifier/tsconfig.main.json"
+    },
+    {
+      "path": "./mods/job-notifier/tsconfig.ui.json"
+    },
+    {
+      "path": "./mods/keyboard-jog/tsconfig.json"
+    },
+    {
+      "path": "./mods/line-numbers/tsconfig.json"
+    },
+    {
+      "path": "./mods/machine-state/tsconfig.json"
+    },
+    {
+      "path": "./mods/mods-menu/tsconfig.json"
+    },
+    {
+      "path": "./mods/program-header/tsconfig.json"
+    },
+    {
+      "path": "./mods/project-backup/tsconfig.json"
+    },
+    {
+      "path": "./mods/safe-shutdown/tsconfig.json"
+    },
+    {
+      "path": "./mods/status-hud/tsconfig.json"
+    },
+    {
+      "path": "./mods/strip-comments/tsconfig.json"
+    },
+    {
+      "path": "./mods/tool-change-assistant/tsconfig.json"
+    },
+    {
+      "path": "./mods/tool-change-guard/tsconfig.json"
+    },
+    {
+      "path": "./mods/ui-scale/tsconfig.main.json"
+    },
+    {
+      "path": "./mods/ui-scale/tsconfig.ui.json"
+    },
+    {
+      "path": "./packages/asar/tsconfig.json"
+    },
+    {
+      "path": "./packages/installer/tsconfig.json"
+    },
+    {
+      "path": "./packages/loader/tsconfig.main.json"
+    },
+    {
+      "path": "./packages/loader/tsconfig.renderer.json"
+    },
+    {
+      "path": "./packages/loader/tsconfig.tests.json"
+    },
+    {
+      "path": "./packages/types/tsconfig.json"
+    },
+    {
+      "path": "./packages/ui-kit/tsconfig.json"
+    }
+  ]
+}

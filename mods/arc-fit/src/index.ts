@@ -27,7 +27,8 @@ interface Settings {
 function defaultExePath(): string | null {
   const override = process.env.NEST_ARCWELDER;
   if (override) return override;
-  const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  // Electron's process augmentation types resourcesPath; under plain Node (tests) it is undefined at runtime.
+  const resources: string | undefined = process.resourcesPath;
   if (!resources) return null;
   return path.join(resources, process.platform === "win32" ? "ArcWelder.exe" : "ArcWelder");
 }

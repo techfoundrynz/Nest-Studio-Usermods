@@ -33,7 +33,7 @@
           resolve(found);
         }
       });
-      const target: Node = root === document ? document.documentElement : (root as Node);
+      const target: Node = root instanceof Node && root !== document ? root : document.documentElement;
       observer.observe(target, { childList: true, subtree: true });
       const timer = setTimeout(() => {
         observer.disconnect();
@@ -65,9 +65,13 @@
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(props)) {
       if (value === undefined || value === null) continue;
-      if (key === "style" && typeof value === "object") Object.assign(node.style, value as Partial<CSSStyleDeclaration>);
+      if (key === "style" && typeof value === "object") Object.assign(node.style, value);
       else if (key === "class") node.className = String(value);
-      else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
+      else if (key.startsWith("on") && typeof value === "function") {
+        // ElProps types on* entries as (event) => void; the index signature widens them to unknown here.
+        const listener: EventListener = (event) => void (value as (event: Event) => void)(event);
+        node.addEventListener(key.slice(2).toLowerCase(), listener);
+      }
       else if (key === "text") node.textContent = String(value);
       else if (key === "html") node.innerHTML = String(value);
       else node.setAttribute(key, String(value));

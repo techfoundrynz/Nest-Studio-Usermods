@@ -7,13 +7,13 @@
   try {
     const { contextBridge, ipcRenderer } = require("electron");
     const invoke = <T = unknown>(channel: string, ...args: unknown[]): Promise<Usermod.IpcResult<T>> =>
-      ipcRenderer.invoke("usermod:" + channel, ...args) as Promise<Usermod.IpcResult<T>>;
+      ipcRenderer.invoke<Usermod.IpcResult<T>>("usermod:" + channel, ...args);
     const bridge: Usermod.Bridge = {
       invoke,
       on: <T = unknown>(channel: string, callback: (payload: T) => void) => {
-        const handler = (_event: unknown, payload: unknown): void => callback(payload as T);
-        ipcRenderer.on("usermod:" + channel, handler);
-        return () => ipcRenderer.removeListener("usermod:" + channel, handler);
+        const handler = (_event: unknown, payload: T): void => callback(payload);
+        ipcRenderer.on<T>("usermod:" + channel, handler);
+        return () => ipcRenderer.removeListener<T>("usermod:" + channel, handler);
       },
       info: () => invoke<Usermod.Info>("info"),
       listUiMods: () => invoke<Usermod.UiModEntry[]>("list-ui-mods"),
@@ -30,7 +30,7 @@
     if (process.contextIsolated) {
       contextBridge.exposeInMainWorld("usermod", bridge);
     } else {
-      (window as unknown as { usermod: Usermod.Bridge }).usermod = bridge;
+      window.usermod = bridge;
     }
 
     const loadScript = (mod: Usermod.UiModEntry): Promise<boolean> =>

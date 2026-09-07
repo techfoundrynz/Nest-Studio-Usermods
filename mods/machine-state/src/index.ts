@@ -42,6 +42,7 @@ interface StreamEvent {
   phase?: string;
   line?: string;
 }
+const isStreamEvent = (value: unknown): value is StreamEvent => typeof value === "object" && value !== null;
 
 const mod: Usermod.MainMod<{ logConsole: boolean; broadcastMs: number }> = {
   description: "Normalised machine status / progress / ETA for other mods (machine:state)",
@@ -168,7 +169,7 @@ const mod: Usermod.MainMod<{ logConsole: boolean; broadcastMs: number }> = {
       contents.send = (channel: string, ...args: unknown[]) => {
         if (channel === "device:stream-event") {
           try {
-            onEvent((args[0] ?? {}) as StreamEvent);
+            if (isStreamEvent(args[0])) onEvent(args[0]);
           } catch (error) {
             api.warn(`event handling failed: ${error instanceof Error ? error.message : String(error)}`);
           }

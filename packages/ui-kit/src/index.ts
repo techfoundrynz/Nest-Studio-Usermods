@@ -178,7 +178,7 @@
       root.style.left = `${Math.round(Math.max(8, left))}px`;
     };
     const onOutside = (event: MouseEvent): void => {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (target && !root.contains(target) && !anchor.contains(target)) close();
     };
     const onKey = (event: KeyboardEvent): void => {
