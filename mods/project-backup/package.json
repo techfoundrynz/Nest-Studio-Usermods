@@ -1,0 +1,20 @@
+{
+  "name": "@neststudio-mods/project-backup",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Keeps timestamped copies of saved project zips in data/backups",
+  "usermod": {
+    "name": "project-backup",
+    "main": "dist/index.js",
+    "order": 55,
+    "description": "Keeps timestamped copies of saved project zips in data/backups"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*"
+  }
+}

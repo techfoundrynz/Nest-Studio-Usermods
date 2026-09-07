@@ -77,8 +77,10 @@ packages/
 mods/
   feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
   strip-comments, line-numbers                                                              (post-processors)
-  mods-menu, dark-mode, gcode-lab, dev-shortcuts                                            (UI)
-  app-tools, job-notifier, ui-scale                                                         (main + UI)
+  mods-menu, dark-mode, gcode-lab, dev-shortcuts, iso-view, status-hud, device-macros,
+  tool-change-assistant, keyboard-jog                                                       (UI)
+  machine-state, camera-timelapse, project-backup, export-filename                          (main)
+  app-tools, job-notifier, ui-scale, export-report                                          (main/post + UI)
 mods.default.json   tracked template: enabled list (empty) + default settings
 mods.json           per-machine copy (git-ignored), created from the template on first run, edited by Mods… / settings forms
 docs/          launch-options.md, architecture.md, mod-api.md
@@ -108,6 +110,16 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `tool-change-guard` | post | Before each tool change: M5/M9 if running, machine-coordinate retract, optional M0 pause for manual bit swaps |
 | `export-copy` | post | Also writes each export to a folder (USB stick, network share) once `targetDir` is set |
 | `job-notifier` | main + ui | Windows toast (and optional webhook) when a machine job finishes, alarms or pauses; status panel in the MODS menu |
+| `export-report` | post + ui | JSON stats report per export (bounds, tools, feeds) in `data/reports`; "Last export report…" in the menu |
+| `iso-view` | ui | Toolbar toggle between perspective and an isometric-style view of the 3D scene; right-click for Top/Front/Right/Iso/Reset |
+| `machine-state` | main | Shared machine status / progress / ETA (`machine:state`) for other mods; optional console log to `data/console` |
+| `status-hud` | ui | Always-visible status pill with progress bar and ETA; click for details |
+| `device-macros` | ui | Toolbar button with user-defined G-code / command macros (with confirmation) |
+| `tool-change-assistant` | ui | When the machine holds at a tool change, names the tool from the library and offers Resume |
+| `camera-timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
+| `project-backup` | main | Timestamped copies of every saved project zip in `data/backups`, newest N kept |
+| `export-filename` | main | Pre-fills the export dialog from a template (`{name} {project} {date} {time}`) and default folder |
+| `keyboard-jog` | ui | Hold arrows / PgUp / PgDn on the Device tab to jog (GRBL `$J`), release to stop |
 | `strip-comments` | post (off) | Removes comments and blank lines, keeping the app header |
 | `line-numbers` | post (off) | Adds `N` line numbers |
 | `mods-menu` | ui | App-bar button and panel: status, mod actions, reload post-processors / UI |

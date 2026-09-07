@@ -299,9 +299,47 @@ const events: Usermod.LoaderEventBus = {
 };
 const countLines = (text: string): number => (text.match(/\n/g)?.length ?? 0) + (text.endsWith("\n") ? 0 : 1);
 
+/* ------------------------------------------------------- interceptors */
+const interceptors = new Map<string, Set<Usermod.Interceptor>>();
+function intercept(channel: string, hooks: Usermod.Interceptor): () => void {
+  const set = interceptors.get(channel) ?? new Set();
+  set.add(hooks);
+  interceptors.set(channel, set);
+  return () => void set.delete(hooks);
+}
+
 /* ---------------------------------------------------- ipc handler hooking */
 type IpcListener = Parameters<typeof ipcMain.handle>[1];
 const originalHandle = ipcMain.handle.bind(ipcMain);
+
+/** Runs registered interceptors around the (already specially wrapped) app handler. */
+function withInterceptors(channel: string, listener: IpcListener): IpcListener {
+  return async (event, ...args: unknown[]) => {
+    const hooks = interceptors.get(channel);
+    if (!hooks || hooks.size === 0) return listener(event, ...args);
+    let current = args;
+    for (const hook of hooks) {
+      if (!hook.before) continue;
+      try {
+        const replaced = await hook.before(current);
+        if (Array.isArray(replaced)) current = replaced;
+      } catch (error) {
+        recordError(`intercept-before:${channel}`, error);
+      }
+    }
+    let result: unknown = await listener(event, ...current);
+    for (const hook of hooks) {
+      if (!hook.after) continue;
+      try {
+        const replaced = await hook.after(result, current);
+        if (replaced !== undefined) result = replaced;
+      } catch (error) {
+        recordError(`intercept-after:${channel}`, error);
+      }
+    }
+    return result;
+  };
+}
 
 function wrapHandler(channel: string, listener: IpcListener): IpcListener {
   if (channel === "store:write-file") {
@@ -324,9 +362,10 @@ function wrapHandler(channel: string, listener: IpcListener): IpcListener {
       try {
         if (isRecord(options) && typeof options.gcode === "string") {
           const fileName = typeof options.fileName === "string" ? options.fileName : undefined;
+          const runTime = Number(options.gcodeRunTime);
           const gcode = await runPostprocessors("send", options.gcode, { fileName, channel, internal: false });
           options = { ...options, gcode };
-          emit("gcode-sent", { channel, fileName, lines: countLines(gcode), bytes: gcode.length });
+          emit("gcode-sent", { channel, fileName, lines: countLines(gcode), bytes: gcode.length, ...(Number.isFinite(runTime) && runTime > 0 ? { runTimeSeconds: runTime } : {}), gcode });
         }
       } catch (error) {
         recordError(`hook:${channel}`, error);
@@ -336,7 +375,7 @@ function wrapHandler(channel: string, listener: IpcListener): IpcListener {
   }
   return listener;
 }
-ipcMain.handle = (channel, listener) => originalHandle(channel, wrapHandler(channel, listener));
+ipcMain.handle = (channel, listener) => originalHandle(channel, withInterceptors(channel, wrapHandler(channel, listener)));
 
 /* -------------------------------------------------------------- main mods */
 function getMainWindow(): electron.BrowserWindow | null {
@@ -376,6 +415,7 @@ function createModApi(name: string): Usermod.MainModApi {
     },
     getMainWindow,
     events,
+    intercept,
     readStore: () => JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "store.json"), "utf8")) as NestStudio.Store,
     runPostprocessors
   };

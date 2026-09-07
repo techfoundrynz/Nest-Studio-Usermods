@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-mods/export-report",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Writes a stats report for every export (bounds, tools, feeds) and shows the last one",
+  "usermod": {
+    "name": "export-report",
+    "postprocessor": "dist/post.js",
+    "ui": "dist/ui.js",
+    "order": 950,
+    "description": "Writes a stats report for every export (bounds, tools, feeds) and shows the last one"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*"
+  }
+}

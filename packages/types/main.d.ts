@@ -40,13 +40,23 @@ declare namespace Usermod {
 
   /** Events the loader emits to main mods (api.events.on). */
   interface LoaderEvents {
-    /** G-code left the app for the machine (after send-stage post-processors). */
-    "gcode-sent": { channel: string; fileName?: string; lines: number; bytes: number };
+    /** G-code left the app for the machine (after send-stage post-processors). `gcode` is the full text. */
+    "gcode-sent": { channel: string; fileName?: string; lines: number; bytes: number; runTimeSeconds?: number; gcode: string };
     /** G-code was written to a file by the app (after export-stage post-processors). */
     "gcode-exported": { filePath: string; fileName: string; lines: number; bytes: number; internal: boolean };
   }
   interface LoaderEventBus {
     on<K extends keyof LoaderEvents>(event: K, listener: (payload: LoaderEvents[K]) => void): () => void;
+  }
+
+  /**
+   * Hooks around any of the app's own IPC invoke channels (e.g. "dialog:show-save", "store:write-binary-file").
+   * before() may return replacement arguments; after() may return a replacement result. Errors are logged
+   * and ignored so a broken interceptor never breaks the app's call.
+   */
+  interface Interceptor {
+    before?(args: unknown[]): unknown[] | void | Promise<unknown[] | void>;
+    after?(result: unknown, args: unknown[]): unknown | Promise<unknown>;
   }
 
   interface MainModApi<S extends object = Record<string, unknown>> {
@@ -69,6 +79,8 @@ declare namespace Usermod {
     send(channel: string, payload: unknown): void;
     getMainWindow(): import("electron").BrowserWindow | null;
     events: LoaderEventBus;
+    /** Hook an app IPC channel; returns an unsubscribe function. */
+    intercept(channel: string, hooks: Interceptor): () => void;
     readStore(): NestStudio.Store;
     runPostprocessors(stage: Stage, gcode: string, ctx?: RunContextInput & { internal?: boolean }): Promise<string>;
   }

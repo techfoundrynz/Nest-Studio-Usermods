@@ -147,8 +147,23 @@ export = mod;
 `{ ok: false, message }`. Main mods have full Node access and load once at startup.
 
 `api.events.on(name, listener)` subscribes to loader events (`Usermod.LoaderEvents`):
-`gcode-sent` `{ channel, fileName, lines, bytes }` after G-code goes to the machine, and
-`gcode-exported` `{ filePath, fileName, lines, bytes, internal }` after a file export. To observe what
+`gcode-sent` `{ channel, fileName, lines, bytes, runTimeSeconds?, gcode }` after G-code goes to the
+machine, and `gcode-exported` `{ filePath, fileName, lines, bytes, internal }` after a file export.
+
+`api.intercept(channel, { before?(args), after?(result, args) })` hooks any of the app's own IPC invoke
+channels. `before` may return replacement arguments, `after` a replacement result; errors are logged and
+skipped. Examples in the bundled mods: `export-filename` rewrites `dialog:show-save` options,
+`project-backup` watches `store:write-binary-file` and the chunked `store:begin/finish-binary-file-write`.
+Channel names come from the app's preload (`out/preload/index.js`); the loader's `usermod.log` and the
+IPC inspector idea in the README are the way to discover more.
+
+The `machine-state` mod turns the device stream into `machine:state` (invoke for current, `usermod.on`
+for updates): `{ connected, status, alarm, phase, line, job: { fileName, lines, runTimeSeconds, startedAt,
+toolChanges }, elapsedSeconds, progress, etaSeconds }`. Build on it rather than parsing status frames again.
+
+3D scene access: the installer exposes the app's three.js `SceneManager` instances as
+`globalThis.__usermodSceneManagers` (typed minimally as `UsermodSceneManagerLike`); `mods/iso-view` shows
+how to drive the app's `CameraController` (target, distance, orientation quaternion) safely. To observe what
 the app streams to its renderer (machine status, console lines), wrap `webContents.send` from
 `app.on("web-contents-created")` as `mods/job-notifier` does; the `device:stream-event` payloads of
 type `machine_status` carry `status` (`Idle`, `Run`, `Hold`, `Alarm`, …) and the line counter `Ln`.

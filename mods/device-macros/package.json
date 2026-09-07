@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/device-macros",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "User-defined G-code / command macro buttons for the connected machine",
+  "usermod": { "name": "device-macros", "ui": "dist/index.js", "order": 40, "description": "User-defined G-code / command macro buttons for the connected machine" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}

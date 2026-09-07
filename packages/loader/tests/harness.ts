@@ -86,7 +86,7 @@ void (async () => {
   check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
   const enabledSet = initial.available.filter((m) => !m.core && !["strip-comments", "line-numbers"].includes(m.name)).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
-  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 6 && enabledInfo.mainMods.length === 3, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 7 && enabledInfo.mainMods.length === 7, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
   check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
 
   let written: { filePath: string; data: string } | null = null;
@@ -134,20 +134,44 @@ void (async () => {
   check("send stage passes through (bundled pps are export-only)", sent!.gcode === gcode && sent!.gcodeRunTime === 5);
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
-  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
+  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy", "export-report"]), info.postprocessors.map((p) => p.name).join(","));
+  check("export-report wrote latest.json", fs.existsSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json")) && JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")).tools.includes(2));
   check("mods left out of enabled are not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
   check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "strip-comments")?.enabled === false && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("job-notifier") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
-  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "camera-timelapse", "export-filename", "job-notifier", "machine-state", "project-backup", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "device-macros", "export-report", "gcode-lab", "iso-view", "job-notifier", "keyboard-jog", "mods-menu", "status-hud", "tool-change-assistant", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
+
+  // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
+  let dialogArgs: unknown[] = [];
+  fakeElectron.ipcMain.handle("dialog:show-save", (_e, ...args) => {
+    dialogArgs = args;
+    return { ok: true, data: { filePath: "C:\\x\\y.nc" } };
+  });
+  await invoke("dialog:show-save", { defaultPath: "Bitcoin.nc", filters: [{ name: "NC Files", extensions: ["nc"] }] });
+  const rewritten = (dialogArgs[0] as { defaultPath?: string } | undefined)?.defaultPath ?? "";
+  check("export-filename intercepts dialog:show-save (template {name} keeps the name)", rewritten === "Bitcoin.nc", rewritten);
+  await invoke("dialog:show-save", { defaultPath: "proj.zip", filters: [{ name: "zip", extensions: ["zip"] }] });
+  check("export-filename leaves non-gcode dialogs alone", (dialogArgs[0] as { defaultPath?: string }).defaultPath === "proj.zip");
+  const zipPath = path.join(loader.ROOT_DIR, "data", "harness-project.zip");
+  fs.writeFileSync(zipPath, "PK-fake");
+  fakeElectron.ipcMain.handle("store:write-binary-file", (_e, _p, _b) => ({ ok: true }));
+  await invoke("store:write-binary-file", zipPath, Buffer.from("PK-fake"));
+  await new Promise((r) => setTimeout(r, 50));
+  const backupDir = path.join(loader.ROOT_DIR, "data", "backups", "harness-project");
+  check("project-backup copied the saved zip", fs.existsSync(backupDir) && fs.readdirSync(backupDir).some((f) => f.endsWith(".zip")));
+  fs.rmSync(zipPath, { force: true });
+  fs.rmSync(backupDir, { recursive: true, force: true });
+  const ms = data(await invoke<{ phase: string; job: { toolChanges: { line: number }[] } }>("usermod:machine:state"));
+  check("machine-state saw the sent job and its tool change lines", ms.phase === "running" && ms.job.toolChanges.length >= 1, JSON.stringify(ms.job.toolChanges));
   const zoom = data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 1.25));
   check("ui-scale clamps and reports zoom", zoom.zoom === 1.25 && data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 9)).zoom === 2);
 
   // job-notifier: gcode-sent event recorded the job; a machine_status stream via webContents.send is observed.
   const status1 = data(await invoke<{ fileName: string | null; totalLines: number | null; phase: string }>("usermod:notifier:status"));
   check("job-notifier saw gcode-sent", status1.fileName === "a.nc" && status1.totalLines === 10 && status1.phase === "running", JSON.stringify(status1));
-  check("main mods hooked web-contents-created (job-notifier, ui-scale)", webContentsHooks.length === 2, String(webContentsHooks.length));
+  check("main mods hooked web-contents-created (job-notifier, ui-scale, machine-state, camera-timelapse)", webContentsHooks.length === 4, String(webContentsHooks.length));
   const fakeContents = { send: (_channel: string, ..._args: unknown[]) => undefined, on: (_event: string, _listener: unknown) => undefined, getURL: () => "file:///renderer/index.html" };
   for (const hook of webContentsHooks) hook({}, fakeContents);
   fakeContents.send("device:stream-event", { type: "machine_status", payload: { status: "Hold", Ln: 42 } });
@@ -186,7 +210,8 @@ void (async () => {
   const rp = data(await invoke<string>("usermod:run-postprocessors", "export", gcode, { fileName: "x.nc" }));
   check("run-postprocessors manual", rp.includes("(File: x.nc)"));
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
-  check("reload ok", rl.postprocessors.length === 6);
+  check("reload ok", rl.postprocessors.length === 7);
+  fs.rmSync(path.join(loader.ROOT_DIR, "data", "reports"), { recursive: true, force: true });
 
   const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings|set-enabled)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
   check("no unexpected loader errors", noise.length === 0, JSON.stringify(noise));

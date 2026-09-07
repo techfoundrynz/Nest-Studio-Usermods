@@ -16,7 +16,8 @@
       "spindleFactor": 1,
       "minFeed": null,
       "maxFeed": null,
-      "maxSpindle": null
+      "maxSpindle": null,
+      "materials": {}
     },
     "strip-comments": {
       "keepHeader": true,
@@ -66,6 +67,76 @@
     "ui-scale": {
       "zoom": 1,
       "compact": false
+    },
+    "iso-view": {
+      "fovDegrees": 6
+    },
+    "machine-state": {
+      "logConsole": false,
+      "broadcastMs": 500
+    },
+    "status-hud": {
+      "position": "bottom-left",
+      "showWhenDisconnected": false
+    },
+    "device-macros": {
+      "confirmAll": false,
+      "macros": [
+        {
+          "name": "Safe Z",
+          "lines": [
+            "G53 G90 G0 Z-1"
+          ],
+          "confirm": true
+        },
+        {
+          "name": "Spindle off",
+          "lines": [
+            "M5"
+          ],
+          "confirm": false
+        },
+        {
+          "name": "Coolant off",
+          "lines": [
+            "M9"
+          ],
+          "confirm": false
+        },
+        {
+          "name": "Status",
+          "lines": [
+            "?"
+          ],
+          "confirm": false
+        }
+      ]
+    },
+    "tool-change-assistant": {
+      "resumeCommand": "~",
+      "windowLines": 3
+    },
+    "camera-timelapse": {
+      "intervalSeconds": 30,
+      "source": "overall",
+      "onlyWhileRunning": true,
+      "maxFramesPerJob": 2000
+    },
+    "project-backup": {
+      "keep": 20
+    },
+    "export-filename": {
+      "template": "{name}",
+      "targetDir": ""
+    },
+    "export-report": {
+      "keep": 50
+    },
+    "keyboard-jog": {
+      "feed": 1500,
+      "zFeed": 600,
+      "distance": 200,
+      "requireDeviceTab": true
     }
   }
 }

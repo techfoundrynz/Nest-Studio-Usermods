@@ -36,6 +36,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/camera-timelapse:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/dark-mode:
     devDependencies:
       '@neststudio-usermods/types':
@@ -48,7 +54,25 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/device-macros:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/export-copy:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/export-filename:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/export-report:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -66,13 +90,31 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/iso-view:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/job-notifier:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/keyboard-jog:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/line-numbers:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/machine-state:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -90,13 +132,31 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/project-backup:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/safe-shutdown:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/status-hud:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/strip-comments:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/tool-change-assistant:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*

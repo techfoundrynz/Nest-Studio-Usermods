@@ -367,6 +367,31 @@ function patchPreload(file: string): void {
   }
   fs.writeFileSync(file, updated, "utf8");
 }
+/** Exposes the app's three.js SceneManager instances (globalThis.__usermodSceneManagers) for view mods. */
+function patchScene(assetsDir: string): void {
+  const marker = "/* NEST-USERMOD-SCENE */";
+  const anchor = "this.cameraController.saveState();";
+  const files = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).filter((f) => /^engine-3d-.*\.js$/.test(f)) : [];
+  if (!files.length) {
+    warn("engine-3d chunk not found; 3D view mods will be inactive");
+    return;
+  }
+  for (const name of files) {
+    const file = path.join(assetsDir, name);
+    const source = fs.readFileSync(file, "utf8");
+    if (source.includes(marker)) {
+      step(`3D scene access already patched (${name})`);
+      continue;
+    }
+    if (!source.includes(anchor)) {
+      warn(`3D scene anchor not found in ${name}; view mods will be inactive`);
+      continue;
+    }
+    fs.writeFileSync(file, source.replace(anchor, `${anchor} (globalThis.__usermodSceneManagers ??= new Set()).add(this); ${marker}`), "utf8");
+    assertParses(file);
+    step(`patched 3D scene access (${name})`);
+  }
+}
 function patchCsp(file: string): void {
   const source = fs.readFileSync(file, "utf8");
   if (source.includes("script-src 'self' file:")) step("CSP already allows file: scripts");
@@ -427,6 +452,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   patchBuildOptions(mainFile, flags);
   patchPreload(path.join(STAGING_DIR, "out", "preload", "index.js"));
   patchCsp(path.join(STAGING_DIR, "out", "renderer", "index.html"));
+  patchScene(path.join(STAGING_DIR, "out", "renderer", "assets"));
 
   step("repacking archive");
   const packed = asarLib.pack(sourceAsar, STAGING_DIR, PACKED_ASAR);
