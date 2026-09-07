@@ -94,11 +94,21 @@ void (async () => {
   check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
   check("disabled mods (mods.json) not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
   check("main mod app-tools active", info.mainMods.some((m) => m.name === "app-tools"));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dev-shortcuts", "gcode-lab", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
   check("mods-menu first ui mod (order 10)", info.uiMods[0]?.name === "mods-menu");
+  check("builtin runtime entries hidden from info", !info.uiMods.some((m) => m.builtin));
   const ui = data(await invoke<Usermod.UiModEntry[]>("usermod:list-ui-mods"));
   check("ui-runtime first with file URL", ui[0]?.name === "ui-runtime" && ui[0].url.startsWith("file:///") && ui[0].url.endsWith("/loader/dist/ui-runtime.js"), ui[0]?.url);
-  check("ui mod urls point at built dist files", ui.slice(1).every((m) => m.url.includes("/mods/") && m.url.endsWith(".js") && fs.existsSync(m.file)));
+  check("ui-kit injected second", ui[1]?.name === "ui-kit" && ui[1].builtin === true && fs.existsSync(ui[1].file), ui[1]?.url);
+  check("ui mod urls point at built dist files", ui.slice(2).every((m) => m.url.includes("/mods/") && m.url.endsWith(".js") && fs.existsSync(m.file)));
+
+  const before = fs.readFileSync(path.join(loader.ROOT_DIR, "mods.json"), "utf8");
+  const saved = data(await invoke<Usermod.Config>("usermod:set-settings", "dark-mode", { followSystem: true }));
+  check("set-settings updates config", saved.settings["dark-mode"]?.followSystem === true && fs.readFileSync(path.join(loader.ROOT_DIR, "mods.json"), "utf8").includes('"followSystem": true'));
+  const badName = await invoke("usermod:set-settings", "../evil", {});
+  check("set-settings rejects bad names", !badName.ok);
+  fs.writeFileSync(path.join(loader.ROOT_DIR, "mods.json"), before, "utf8");
+  await invoke("usermod:reload");
 
   check("read-file inside repo", data(await invoke<string>("usermod:read-file", "mods.json")).includes("settings"));
   const esc = await invoke("usermod:read-file", `..${sep}store.json`);
@@ -121,7 +131,7 @@ void (async () => {
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
   check("reload ok", rl.postprocessors.length === 4);
 
-  const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read|write)-file|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
+  const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
   check("no unexpected loader errors", noise.length === 0, JSON.stringify(noise));
   console.log(failures ? `\n${failures} FAILED` : "\nALL PASSED");
   process.exit(failures ? 1 : 0);

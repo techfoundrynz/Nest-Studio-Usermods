@@ -30,6 +30,8 @@ declare namespace Usermod {
     name: string;
     file: string;
     url: string;
+    /** Runtime pieces (ui-runtime, ui-kit) injected before mods; not user mods. */
+    builtin?: boolean;
   }
   interface LoaderError {
     scope: string;
@@ -68,10 +70,12 @@ declare namespace Usermod {
     reload(): Promise<IpcResult<Info>>;
     openModDir(): Promise<IpcResult<string>>;
     runPostprocessors(stage: Stage, gcode: string, ctx?: RunContextInput): Promise<IpcResult<string>>;
+    /** Replace one mod's block in mods.json "settings" and reload the config. */
+    setSettings(modName: string, settings: Record<string, unknown>): Promise<IpcResult<Config>>;
   }
 
   /* ------------------------------------------------------------ renderer runtime */
-  type ElChild = Node | string | null | undefined;
+  type ElChild = Node | string | null | undefined | false;
   interface ElProps {
     class?: string;
     text?: string;
@@ -141,6 +145,99 @@ declare namespace Usermod {
     readonly api: NestStudio.Api;
     readonly bridge: Bridge;
   }
+
+  /* ------------------------------------------------------------------ ui kit */
+  type IconSource = string | Node | (() => Node);
+  interface ToolbarButtonOptions {
+    id: string;
+    title: string;
+    icon: IconSource;
+    onClick(button: HTMLButtonElement): void | Promise<void>;
+    /** Left-to-right order among usermod toolbar buttons (default 100). */
+    order?: number;
+    ariaLabel?: string;
+  }
+  interface ToolbarButtonHandle {
+    readonly id: string;
+    element(): HTMLButtonElement | null;
+    setIcon(icon: IconSource): void;
+    setTitle(title: string): void;
+    /** Small red dot in the corner, e.g. "attention needed". */
+    setBadge(on: boolean): void;
+    remove(): void;
+  }
+  interface PopoverOptions {
+    width?: number;
+    align?: "left" | "right";
+    className?: string;
+    onClose?(): void;
+  }
+  interface PopoverHandle {
+    root: HTMLElement;
+    body: HTMLElement;
+    close(): void;
+    isOpen(): boolean;
+    reposition(): void;
+  }
+  interface ButtonOptions {
+    primary?: boolean;
+    title?: string;
+    disabled?: boolean;
+    class?: string;
+  }
+  interface SelectOption {
+    label: string;
+    value: string;
+  }
+  type SettingsFieldType = "boolean" | "number" | "string" | "select";
+  interface SettingsField {
+    key: string;
+    label: string;
+    type: SettingsFieldType;
+    help?: string;
+    options?: SelectOption[];
+    min?: number;
+    max?: number;
+    step?: number;
+    placeholder?: string;
+    /** Empty input stores null instead of "" / NaN. */
+    nullable?: boolean;
+  }
+  interface SettingsFormOptions {
+    title?: string;
+    fields: SettingsField[];
+    /** Also call usermod.reload() after saving so post-processors pick the values up (default true). */
+    reloadPostprocessors?: boolean;
+    onSaved?(settings: Record<string, unknown>): void | Promise<void>;
+  }
+  interface UI {
+    version: string;
+    toolbar: {
+      addButton(options: ToolbarButtonOptions): ToolbarButtonHandle;
+      removeButton(id: string): void;
+      buttons(): string[];
+    };
+    popover(anchor: HTMLElement, options?: PopoverOptions): PopoverHandle;
+    closePopovers(): void;
+    modal(title: string, options?: { width?: number }): ModalHandle;
+    button(label: string, onClick: (event: MouseEvent) => void | Promise<void>, options?: ButtonOptions): HTMLButtonElement;
+    buttonRow(buttons: ElChild[]): HTMLDivElement;
+    section(title: string, children?: ElChild | ElChild[]): HTMLElement;
+    list<T>(items: T[], render: (item: T) => ElChild | ElChild[], empty?: string): HTMLUListElement;
+    kv(pairs: [string, string][]): HTMLDListElement;
+    toggle(label: string, checked: boolean, onChange: (checked: boolean) => void, help?: string): HTMLLabelElement;
+    select(label: string, options: SelectOption[], value: string, onChange: (value: string) => void, help?: string): HTMLLabelElement;
+    input(label: string, value: string, onChange: (value: string) => void, options?: { type?: "text" | "number"; placeholder?: string; min?: number; max?: number; step?: number; help?: string }): HTMLLabelElement;
+    /** Form bound to mods.json "settings.<modName>"; saves through the loader. */
+    settingsForm(modName: string, options: SettingsFormOptions): HTMLElement;
+    icons: {
+      svg(pathData: string, options?: { viewBox?: string; filled?: boolean; strokeWidth?: number }): SVGSVGElement;
+      puzzle(): SVGSVGElement;
+      moon(): SVGSVGElement;
+      sun(): SVGSVGElement;
+      gear(): SVGSVGElement;
+    };
+  }
 }
 
 /** The subset of Nest Studio's own preload API (window.api) that mods use. Shapes observed in 1.1.0. */
@@ -171,9 +268,16 @@ declare namespace NestStudio {
     slotNum: number;
     [key: string]: unknown;
   }
+  type Theme = "light" | "dark";
+  interface AppPrefs {
+    language?: string;
+    theme?: Theme;
+    autoUpdater?: boolean;
+    [key: string]: unknown;
+  }
   interface Store {
+    app?: AppPrefs;
     toolLibary?: { cutLibrarySettings?: Tool[]; materialSettings?: unknown[] };
-    app?: Record<string, unknown>;
     [key: string]: unknown;
   }
   interface FileFilter {
@@ -208,6 +312,7 @@ declare namespace NestStudio {
     };
     store: {
       read(): Promise<Result<Store>>;
+      /** Replaces the whole user store (store.json). Read, modify, write. */
       write(data: Store): Promise<Result<void>>;
       readFile(filePath: string): Promise<Result<string>>;
       /** Goes through the loader's export hook, so post-processors apply to G-code paths. */

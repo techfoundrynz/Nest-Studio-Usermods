@@ -74,7 +74,7 @@
     }
     const list = Array.isArray(children) ? children : [children];
     for (const child of list) {
-      if (child == null) continue;
+      if (child == null || child === false) continue; // null/undefined/false render nothing (never the text "null")
       node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
     }
     return node;

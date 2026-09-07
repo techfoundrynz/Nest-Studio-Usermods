@@ -1,12 +1,44 @@
 {
-  "disabled": ["strip-comments", "line-numbers"],
+  "disabled": [
+    "line-numbers",
+    "strip-comments"
+  ],
   "settings": {
-    "program-header": { "label": "Nest Studio usermod", "includeStats": true },
-    "safe-shutdown": { "spindleOff": true, "coolantOff": true, "programEnd": true },
-    "feed-override": { "feedFactor": 1, "spindleFactor": 1, "minFeed": null, "maxFeed": null, "maxSpindle": null },
-    "strip-comments": { "keepHeader": true, "removeBlankLines": true },
-    "line-numbers": { "start": 10, "step": 10, "skipComments": true },
-    "export-copy": { "targetDir": "", "subfolderByDate": false, "overwrite": true },
-    "dev-shortcuts": { "reload": true }
+    "program-header": {
+      "label": "Nest Studio usermod",
+      "includeStats": true
+    },
+    "safe-shutdown": {
+      "spindleOff": true,
+      "coolantOff": true,
+      "programEnd": true
+    },
+    "feed-override": {
+      "feedFactor": 1,
+      "spindleFactor": 1,
+      "minFeed": null,
+      "maxFeed": null,
+      "maxSpindle": null
+    },
+    "strip-comments": {
+      "keepHeader": true,
+      "removeBlankLines": true
+    },
+    "line-numbers": {
+      "start": 10,
+      "step": 10,
+      "skipComments": true
+    },
+    "export-copy": {
+      "targetDir": "",
+      "subfolderByDate": false,
+      "overwrite": true
+    },
+    "dev-shortcuts": {
+      "reload": true
+    },
+    "dark-mode": {
+      "followSystem": false
+    }
   }
 }

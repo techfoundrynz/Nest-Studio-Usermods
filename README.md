@@ -55,9 +55,10 @@ packages/
   loader/      @neststudio-usermods/loader     main.ts (main-process loader), preload.ts (bridge), ui-runtime.ts, tests/
   asar/        @neststudio-usermods/asar       dependency-free asar extract/pack/list/cat (library + nest-asar CLI)
   installer/   @neststudio-usermods/installer  interactive installer (tsx + prompts)
+  ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms
 mods/
   feed-override, program-header, safe-shutdown, strip-comments, line-numbers, export-copy   (post-processors)
-  mods-menu, gcode-lab, dev-shortcuts                                                       (UI)
+  mods-menu, dark-mode, gcode-lab, dev-shortcuts                                            (UI)
   app-tools                                                                                (main + UI)
 mods.json      disabled list + per-mod settings (edited by "Select mods")
 docs/          launch-options.md, architecture.md, mod-api.md
@@ -84,6 +85,7 @@ Keys: `postprocessor`, `ui`, `main` (entry files, any combination), `order` (loa
 | `strip-comments` | post (off) | Removes comments and blank lines, keeping the app header |
 | `line-numbers` | post (off) | Adds `N` line numbers |
 | `mods-menu` | ui | App-bar button and panel: status, mod actions, reload post-processors / UI |
+| `dark-mode` | ui | Sun/moon toolbar button that switches Nest Studio's built-in dark theme; optional follow-OS setting |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via chain |
 | `app-tools` | ui + main | Open app logs / user data / usermod.log, CAM service status, open API docs |
 | `dev-shortcuts` | ui | `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log |
@@ -100,7 +102,9 @@ pnpm test           # build, then run the loader harness under a stubbed Electro
 ```
 
 Writing a mod: copy one of the `mods/*` packages, edit `src/index.ts` against the `Usermod.*` types,
-add the `usermod` manifest, run `pnpm install` (links the types package) and `pnpm run build`. See
+add the `usermod` manifest, run `pnpm install` (links the types package) and `pnpm run build`. UI mods
+build on `window.usermodUI` (toolbar buttons next to the Settings gear, popovers, modals, form and
+settings helpers); `mods/mods-menu` and `mods/dark-mode` are the reference examples. See
 [docs/mod-api.md](docs/mod-api.md) for the API, [docs/architecture.md](docs/architecture.md) for how the
 app is put together and why the installer repacks the archive, and
 [docs/launch-options.md](docs/launch-options.md) for environment variables, switches, ports and helper

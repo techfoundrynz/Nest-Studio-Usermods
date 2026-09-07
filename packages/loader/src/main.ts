@@ -347,9 +347,12 @@ function loadMainMods(): void {
 }
 
 /* ----------------------------------------------------------- ui mod list */
+const UI_KIT = path.join(ROOT_DIR, "packages", "ui-kit", "dist", "index.js");
 function listUiMods(): Usermod.UiModEntry[] {
   const runtime = path.join(__dirname, "ui-runtime.js");
-  const entries: Usermod.UiModEntry[] = [{ name: "ui-runtime", file: runtime, url: pathToFileURL(runtime).href }];
+  const entries: Usermod.UiModEntry[] = [{ name: "ui-runtime", file: runtime, url: pathToFileURL(runtime).href, builtin: true }];
+  if (fs.existsSync(UI_KIT)) entries.push({ name: "ui-kit", file: UI_KIT, url: pathToFileURL(UI_KIT).href, builtin: true });
+  else recordError("ui-kit", new Error(`not built: ${UI_KIT}`));
   for (const manifest of enabledManifests()) {
     if (!manifest.ui) continue;
     if (!fs.existsSync(manifest.ui)) {
@@ -382,7 +385,7 @@ function getInfo(): Usermod.Info {
     config: state.config,
     postprocessors: state.postprocessors.map((p) => ({ name: p.name, file: p.file, stages: p.stages, description: p.description })),
     mainMods: state.mainMods,
-    uiMods: listUiMods().slice(1),
+    uiMods: listUiMods().filter((entry) => !entry.builtin),
     errors: state.errors
   };
 }
@@ -409,6 +412,20 @@ function registerLoaderIpc(): void {
     discoverManifests();
     loadPostprocessors();
     return getInfo();
+  });
+  define("set-settings", (modName: unknown, settings: unknown) => {
+    if (typeof modName !== "string" || !/^[a-z0-9][a-z0-9._-]*$/i.test(modName)) throw new Error("invalid mod name");
+    if (!isRecord(settings)) throw new Error("settings must be an object");
+    const raw: unknown = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) : {};
+    const file: Record<string, unknown> = isRecord(raw) ? raw : {};
+    const all = isRecord(file.settings) ? file.settings : {};
+    all[modName] = settings;
+    file.settings = all;
+    if (!Array.isArray(file.disabled)) file.disabled = [];
+    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+    loadConfig();
+    log("info", `settings saved for ${modName}`);
+    return state.config;
   });
   define("open-mod-dir", () => shell.openPath(ROOT_DIR));
   define("run-postprocessors", (stage: unknown, gcode: unknown, ctx: unknown) => {

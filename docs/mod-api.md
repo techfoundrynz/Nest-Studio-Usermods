@@ -72,10 +72,36 @@ Classic scripts (an IIFE per file) injected after the UI runtime. Globals are ty
 | `formatDuration(s)`, `formatBytes(n)` | formatting helpers |
 | `api` | alias of `window.api` (the app's own preload API, `NestStudio.Api`) |
 
+### `window.usermodUI` (`Usermod.UI`, from `packages/ui-kit`)
+
+The toolkit for building mod UI that looks like the MODS menu. Injected after the runtime, before mods.
+
+| Member | Purpose |
+| --- | --- |
+| `toolbar.addButton({ id, title, icon, onClick, order })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove` |
+| `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
+| `modal(title, { width })` | centred dialog (`{ root, body, close }`) |
+| `button(label, onClick, { primary, title, disabled })`, `buttonRow([...])` | buttons; async errors become toasts |
+| `section(title, children)`, `list(items, render, empty)`, `kv(pairs)` | panel building blocks |
+| `toggle(label, checked, onChange, help)`, `select(...)`, `input(...)` | form controls |
+| `settingsForm(modName, { title, fields, reloadPostprocessors, onSaved })` | form bound to `mods.json` `settings.<modName>`, saved through the loader |
+| `icons.puzzle() / moon() / sun() / gear()`, `icons.svg(pathData)` | 22 px inline SVG icons |
+
+Styles key off the app's `html[data-theme]`, so kit UI follows the app's light/dark theme.
+
+```ts
+const ui = window.usermodUI;
+const handle = ui.toolbar.addButton({ id: "hello", title: "Hello", icon: ui.icons.gear, order: 50, onClick: (btn) => {
+  const p = ui.popover(btn, { width: 320 });
+  p.body.append(ui.section("Hello", ui.kv([["Route", location.hash]])), ui.settingsForm("hello", { fields: [{ key: "loud", label: "Loud", type: "boolean" }] }));
+} });
+```
+
 ### `window.usermod` (`Usermod.Bridge`)
 
 `info()`, `invoke<T>(channel, ...args)`, `on<T>(channel, cb)`, `readFile(rel)`, `writeFile(rel, text)`
-(confined to `data/`), `log(level, ...)`, `reload()`, `openModDir()`, `runPostprocessors(stage, gcode, ctx)`.
+(confined to `data/`), `log(level, ...)`, `reload()`, `openModDir()`, `runPostprocessors(stage, gcode, ctx)`,
+`setSettings(modName, settings)` (rewrites that mod's block in `mods.json`).
 Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: false, message }`.
 
 ### `window.api` (`NestStudio.Api`, the subset that is typed)
@@ -85,7 +111,11 @@ Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: fa
 paths only; goes through the post-processor hook), `shell.openExternal(url)` (allow-listed hosts only).
 
 The CSP allows scripts from `file:` and network access to the CAM service only. Bundled UI mods:
-`mods-menu`, `gcode-lab`, `app-tools`, `dev-shortcuts`.
+`mods-menu`, `dark-mode`, `gcode-lab`, `app-tools`, `dev-shortcuts`.
+
+Theme note: Nest Studio applies `data-theme="light|dark"` on `<html>` from `app.theme` in the user
+store and ships full token sets for both. `dark-mode` switches it by writing the store through
+`window.api.store.write` and reloading the renderer.
 
 ## Main mods (main process)
 

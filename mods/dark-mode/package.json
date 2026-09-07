@@ -1,0 +1,20 @@
+{
+  "name": "@neststudio-mods/dark-mode",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Toolbar toggle for Nest Studio's built-in dark theme, optionally following the OS setting",
+  "usermod": {
+    "name": "dark-mode",
+    "ui": "dist/index.js",
+    "order": 15,
+    "description": "Toolbar toggle for Nest Studio's built-in dark theme, optionally following the OS setting"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*"
+  }
+}

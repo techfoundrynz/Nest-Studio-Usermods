@@ -30,6 +30,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/dark-mode:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/dev-shortcuts:
     devDependencies:
       '@neststudio-usermods/types':
@@ -106,6 +112,12 @@ importers:
         version: link:../types
 
   packages/types: {}
+
+  packages/ui-kit:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../types
 
 packages:
 
