@@ -30,6 +30,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/arc-fit:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/dark-mode:
     devDependencies:
       '@neststudio-usermods/types':
@@ -60,6 +66,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/job-notifier:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   mods/line-numbers:
     devDependencies:
       '@neststudio-usermods/types':
@@ -85,6 +97,12 @@ importers:
         version: link:../../packages/types
 
   mods/strip-comments:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/tool-change-guard:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*

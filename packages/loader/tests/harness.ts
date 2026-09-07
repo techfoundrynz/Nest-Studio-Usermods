@@ -10,11 +10,23 @@ type Handler = (event: unknown, ...args: unknown[]) => unknown;
 const handlers = new Map<string, Handler>();
 const opened: string[] = [];
 const USER_DATA = String.raw`C:\Users\test\AppData\Roaming\Nest Studio`;
+const arcWelder = String.raw`C:\Program Files\nest-studio\resources\ArcWelder.exe`;
+if (fs.existsSync(arcWelder) && !process.env.NEST_ARCWELDER) process.env.NEST_ARCWELDER = arcWelder;
+const webContentsHooks: ((event: unknown, contents: unknown) => void)[] = [];
 const fakeElectron = {
   app: {
     getVersion: () => "1.1.0-test",
     getPath: (name: string) => (name === "userData" ? USER_DATA : path.dirname(USER_DATA)),
-    whenReady: () => Promise.resolve()
+    whenReady: () => Promise.resolve(),
+    on: (event: string, listener: (event: unknown, contents: unknown) => void) => {
+      if (event === "web-contents-created") webContentsHooks.push(listener);
+    }
+  },
+  Notification: class {
+    static isSupported(): boolean {
+      return false;
+    }
+    show(): void { }
   },
   ipcMain: {
     handle: (channel: string, fn: Handler) => void handlers.set(channel, fn),
@@ -74,6 +86,18 @@ void (async () => {
   check("safe-shutdown inserted M5 and M9 before M30", /M5 \(usermod[^\n]*\nM9 \(usermod[^\n]*\nM30/.test(out));
   check("feed-override neutral leaves F/S untouched", out.includes("F800") && out.includes("S12000"));
   check("body code preserved", out.includes("G1 X20 Y15") && out.trim().endsWith("M30"));
+  check("tool-change-guard skips the first change by default", !out.includes("(usermod: tool change"));
+
+  // Second tool change mid-program with spindle and coolant running: guard must insert M5, M9 and a retract.
+  const twoTools = gcode.replace("G1 X20 Y15\n", "G1 X20 Y15\nT2 M6\nS9000 M3\nG1 X0 Y0\n");
+  // Padding before M30 pushes the program over arc-fit's minBytes so ArcWelder actually runs when available.
+  const big = twoTools.replace("M30\n", `${"(pad)\n".repeat(400)}M30\n`);
+  await invoke("store:write-file", `${downloads}two.nc`, big);
+  const out2 = written!.data;
+  check("tool-change-guard guards the second change", /\(usermod: tool change T2\)\nM5\nM9\nG53 G90 G0 Z-1\nT2 M6/.test(out2), out2.split("\n").slice(9, 16).join(" | "));
+  if (process.env.NEST_ARCWELDER) {
+    check("arc-fit ran through ArcWelder and kept the program", /G1 X20(\.0+)? Y15(\.0+)?/.test(out2) && out2.includes("(File: two.nc)") && out2.trim().endsWith("M30"), out2.split("\n").slice(-3).join(" | "));
+  } else console.log("SKIP arc-fit (ArcWelder.exe not found)");
 
   written = null;
   await invoke("store:write-file", `${USER_DATA}${sep}gcode-work${sep}checkGcode.nc`, gcode);
@@ -91,10 +115,20 @@ void (async () => {
   check("send stage passes through (bundled pps are export-only)", sent!.gcode === gcode && sent!.gcodeRunTime === 5);
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
-  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
+  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy"]), info.postprocessors.map((p) => p.name).join(","));
   check("disabled mods (mods.json) not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
-  check("main mod app-tools active", info.mainMods.some((m) => m.name === "app-tools"));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "job-notifier"]), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "gcode-lab", "job-notifier", "mods-menu"]), info.uiMods.map((m) => m.name).join(","));
+
+  // job-notifier: gcode-sent event recorded the job; a machine_status stream via webContents.send is observed.
+  const status1 = data(await invoke<{ fileName: string | null; totalLines: number | null; phase: string }>("usermod:notifier:status"));
+  check("job-notifier saw gcode-sent", status1.fileName === "a.nc" && status1.totalLines === 10 && status1.phase === "running", JSON.stringify(status1));
+  check("job-notifier hooked web-contents-created", webContentsHooks.length === 1);
+  const fakeContents = { send: (_channel: string, ..._args: unknown[]) => undefined };
+  webContentsHooks[0]?.({}, fakeContents);
+  fakeContents.send("device:stream-event", { type: "machine_status", payload: { status: "Hold", Ln: 42 } });
+  const status2 = data(await invoke<{ phase: string; lastLine: number | null }>("usermod:notifier:status"));
+  check("job-notifier tracks machine status", status2.phase === "paused" && status2.lastLine === 42, JSON.stringify(status2));
   check("mods-menu first ui mod (order 10)", info.uiMods[0]?.name === "mods-menu");
   check("builtin runtime entries hidden from info", !info.uiMods.some((m) => m.builtin));
   const ui = data(await invoke<Usermod.UiModEntry[]>("usermod:list-ui-mods"));
@@ -129,7 +163,7 @@ void (async () => {
   const rp = data(await invoke<string>("usermod:run-postprocessors", "export", gcode, { fileName: "x.nc" }));
   check("run-postprocessors manual", rp.includes("(File: x.nc)"));
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
-  check("reload ok", rl.postprocessors.length === 4);
+  check("reload ok", rl.postprocessors.length === 6);
 
   const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
   check("no unexpected loader errors", noise.length === 0, JSON.stringify(noise));

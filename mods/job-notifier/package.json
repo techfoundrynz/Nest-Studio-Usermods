@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-mods/job-notifier",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Windows notifications and optional webhook when a machine job completes, errors or pauses",
+  "usermod": {
+    "name": "job-notifier",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 30,
+    "description": "Windows notifications and optional webhook when a machine job completes, errors or pauses"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*"
+  }
+}

@@ -38,6 +38,17 @@ declare namespace Usermod {
   /** Handlers receive whatever the renderer passed; validate at the boundary. */
   type IpcHandler = (...args: any[]) => unknown;
 
+  /** Events the loader emits to main mods (api.events.on). */
+  interface LoaderEvents {
+    /** G-code left the app for the machine (after send-stage post-processors). */
+    "gcode-sent": { channel: string; fileName?: string; lines: number; bytes: number };
+    /** G-code was written to a file by the app (after export-stage post-processors). */
+    "gcode-exported": { filePath: string; fileName: string; lines: number; bytes: number; internal: boolean };
+  }
+  interface LoaderEventBus {
+    on<K extends keyof LoaderEvents>(event: K, listener: (payload: LoaderEvents[K]) => void): () => void;
+  }
+
   interface MainModApi<S extends object = Record<string, unknown>> {
     name: string;
     electron: typeof import("electron");
@@ -57,6 +68,7 @@ declare namespace Usermod {
     /** Sends `usermod:<channel>` to the main window; UI mods listen with usermod.on(channel, cb). */
     send(channel: string, payload: unknown): void;
     getMainWindow(): import("electron").BrowserWindow | null;
+    events: LoaderEventBus;
     readStore(): NestStudio.Store;
     runPostprocessors(stage: Stage, gcode: string, ctx?: RunContextInput & { internal?: boolean }): Promise<string>;
   }

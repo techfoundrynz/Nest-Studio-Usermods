@@ -242,6 +242,28 @@ async function runPostprocessors(stage: Usermod.Stage, gcode: string, ctx: Userm
   return current;
 }
 
+/* ------------------------------------------------------------ event bus */
+type Listener<K extends keyof Usermod.LoaderEvents> = (payload: Usermod.LoaderEvents[K]) => void;
+const listeners = new Map<keyof Usermod.LoaderEvents, Set<Listener<keyof Usermod.LoaderEvents>>>();
+function emit<K extends keyof Usermod.LoaderEvents>(event: K, payload: Usermod.LoaderEvents[K]): void {
+  for (const listener of listeners.get(event) ?? []) {
+    try {
+      (listener as Listener<K>)(payload);
+    } catch (error) {
+      recordError(`event:${event}`, error);
+    }
+  }
+}
+const events: Usermod.LoaderEventBus = {
+  on(event, listener) {
+    const set = listeners.get(event) ?? new Set();
+    set.add(listener as Listener<keyof Usermod.LoaderEvents>);
+    listeners.set(event, set);
+    return () => void set.delete(listener as Listener<keyof Usermod.LoaderEvents>);
+  }
+};
+const countLines = (text: string): number => (text.match(/\n/g)?.length ?? 0) + (text.endsWith("\n") ? 0 : 1);
+
 /* ---------------------------------------------------- ipc handler hooking */
 type IpcListener = Parameters<typeof ipcMain.handle>[1];
 const originalHandle = ipcMain.handle.bind(ipcMain);
@@ -251,11 +273,10 @@ function wrapHandler(channel: string, listener: IpcListener): IpcListener {
     return async (event, filePath: unknown, data: unknown) => {
       try {
         if (typeof data === "string" && typeof filePath === "string" && GCODE_EXT.test(filePath)) {
-          data = await runPostprocessors("export", data, {
-            filePath,
-            fileName: path.basename(filePath),
-            internal: isInternalPath(filePath)
-          });
+          const internal = isInternalPath(filePath);
+          const processed = await runPostprocessors("export", data, { filePath, fileName: path.basename(filePath), internal });
+          data = processed;
+          emit("gcode-exported", { filePath, fileName: path.basename(filePath), lines: countLines(processed), bytes: processed.length, internal });
         }
       } catch (error) {
         recordError("hook:store:write-file", error);
@@ -267,12 +288,10 @@ function wrapHandler(channel: string, listener: IpcListener): IpcListener {
     return async (event, options: unknown) => {
       try {
         if (isRecord(options) && typeof options.gcode === "string") {
-          const gcode = await runPostprocessors("send", options.gcode, {
-            fileName: typeof options.fileName === "string" ? options.fileName : undefined,
-            channel,
-            internal: false
-          });
+          const fileName = typeof options.fileName === "string" ? options.fileName : undefined;
+          const gcode = await runPostprocessors("send", options.gcode, { fileName, channel, internal: false });
           options = { ...options, gcode };
+          emit("gcode-sent", { channel, fileName, lines: countLines(gcode), bytes: gcode.length });
         }
       } catch (error) {
         recordError(`hook:${channel}`, error);
@@ -321,6 +340,7 @@ function createModApi(name: string): Usermod.MainModApi {
       getMainWindow()?.webContents.send(`usermod:${channel}`, payload);
     },
     getMainWindow,
+    events,
     readStore: () => JSON.parse(fs.readFileSync(path.join(app.getPath("userData"), "store.json"), "utf8")) as NestStudio.Store,
     runPostprocessors
   };

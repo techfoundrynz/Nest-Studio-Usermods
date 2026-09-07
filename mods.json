@@ -39,6 +39,31 @@
     },
     "dark-mode": {
       "followSystem": false
+    },
+    "arc-fit": {
+      "resolutionMm": 0.01,
+      "pathTolerancePercent": 0.05,
+      "maxRadiusMm": 9999,
+      "allow3dArcs": false,
+      "minBytes": 2048
+    },
+    "tool-change-guard": {
+      "spindleOff": true,
+      "coolantOff": true,
+      "retract": true,
+      "retractGcode": "G53 G90 G0 Z-1",
+      "pause": false,
+      "skipFirst": true,
+      "treatTAsChange": false
+    },
+    "job-notifier": {
+      "notifyComplete": true,
+      "notifyError": true,
+      "notifyPause": true,
+      "minRunSeconds": 20,
+      "settleSeconds": 3,
+      "webhookUrl": "",
+      "silent": false
     }
   }
 }

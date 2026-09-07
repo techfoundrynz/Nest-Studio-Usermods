@@ -132,11 +132,19 @@ export = mod;
 
 `Usermod.MainModApi<S>`: `name`, `electron`, `app`, `modDir`, `distDir`, `dataDir`, `settings`,
 `whenReady()`, `log/warn/error`, `handle(channel, fn)`, `send(channel, payload)`, `getMainWindow()`,
-`readStore()`, `runPostprocessors()`. Handler results become `{ ok: true, data }`, thrown errors
+`events`, `readStore()`, `runPostprocessors()`. Handler results become `{ ok: true, data }`, thrown errors
 `{ ok: false, message }`. Main mods have full Node access and load once at startup.
 
+`api.events.on(name, listener)` subscribes to loader events (`Usermod.LoaderEvents`):
+`gcode-sent` `{ channel, fileName, lines, bytes }` after G-code goes to the machine, and
+`gcode-exported` `{ filePath, fileName, lines, bytes, internal }` after a file export. To observe what
+the app streams to its renderer (machine status, console lines), wrap `webContents.send` from
+`app.on("web-contents-created")` as `mods/job-notifier` does; the `device:stream-event` payloads of
+type `machine_status` carry `status` (`Idle`, `Run`, `Hold`, `Alarm`, …) and the line counter `Ln`.
+
 Bundled: `app-tools` (`tools:ping`, `tools:open-logs`, `tools:open-userdata`, `tools:open-usermod-log`,
-`tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`).
+`tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`) and `job-notifier`
+(`notifier:status`, `notifier:test`, `notifier:reload-settings`; emits `job-notifier:event` to the UI).
 
 ## Loader internals
 

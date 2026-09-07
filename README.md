@@ -57,9 +57,10 @@ packages/
   installer/   @neststudio-usermods/installer  interactive installer (tsx + prompts)
   ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms
 mods/
-  feed-override, program-header, safe-shutdown, strip-comments, line-numbers, export-copy   (post-processors)
+  feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
+  strip-comments, line-numbers                                                              (post-processors)
   mods-menu, dark-mode, gcode-lab, dev-shortcuts                                            (UI)
-  app-tools                                                                                (main + UI)
+  app-tools, job-notifier                                                                   (main + UI)
 mods.json      disabled list + per-mod settings (edited by "Select mods")
 docs/          launch-options.md, architecture.md, mod-api.md
 build/, data/, usermod.log, **/dist   generated, git-ignored
@@ -81,7 +82,10 @@ Keys: `postprocessor`, `ui`, `main` (entry files, any combination), `order` (loa
 | `program-header` | post | Comment block after the app header: file, date, lines, tools, feed/spindle range, XYZ bounds |
 | `safe-shutdown` | post | Inserts `M5`/`M9` before `M30` when spindle/coolant were left on; appends `M30` if missing |
 | `feed-override` | post | Scale/clamp `F` and `S` words (no-op at factor 1) |
+| `arc-fit` | post | Runs the bundled ArcWelder on every export: G1 segment chains become G2/G3 arcs (much smaller reliefs) |
+| `tool-change-guard` | post | Before each tool change: M5/M9 if running, machine-coordinate retract, optional M0 pause for manual bit swaps |
 | `export-copy` | post | Also writes each export to a folder (USB stick, network share) once `targetDir` is set |
+| `job-notifier` | main + ui | Windows toast (and optional webhook) when a machine job finishes, alarms or pauses; status panel in the MODS menu |
 | `strip-comments` | post (off) | Removes comments and blank lines, keeping the app header |
 | `line-numbers` | post (off) | Adds `N` line numbers |
 | `mods-menu` | ui | App-bar button and panel: status, mod actions, reload post-processors / UI |
