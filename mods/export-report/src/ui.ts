@@ -24,8 +24,11 @@
   }
   let lastSeen = "";
 
+  const LATEST = "data/reports/latest.json";
   async function latest(): Promise<Report | null> {
-    const r = await window.usermod.readFile("data/reports/latest.json");
+    const present = await window.usermod.exists(LATEST);
+    if (!present.ok || !present.data) return null;
+    const r = await window.usermod.readFile(LATEST);
     if (!r.ok) return null;
     try {
       return JSON.parse(r.data) as Report;

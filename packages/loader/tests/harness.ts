@@ -190,6 +190,10 @@ void (async () => {
   check("set-settings rejects bad names", !badName.ok);
 
   check("read-file inside repo", data(await invoke<string>("usermod:read-file", "mods.json")).includes("settings"));
+  const errorsBefore = data(await invoke<Usermod.Info>("usermod:info")).errors.length;
+  const missing = await invoke<string>("usermod:read-file", "data/reports/does-not-exist.json");
+  check("read-file of a missing file is ok:false without a recorded error", !missing.ok && /not found/.test(missing.message) && data(await invoke<Usermod.Info>("usermod:info")).errors.length === errorsBefore);
+  check("exists reports presence", data(await invoke<boolean>("usermod:exists", "mods.json")) === true && data(await invoke<boolean>("usermod:exists", "nope.json")) === false);
   const esc = await invoke("usermod:read-file", `..${sep}store.json`);
   check("read-file traversal rejected", !esc.ok && /escapes/.test(esc.message));
   const wf = await invoke<string>("usermod:write-file", `test${sep}hello.txt`, "hi");

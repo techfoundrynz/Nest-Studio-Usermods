@@ -88,6 +88,8 @@ declare namespace Usermod {
     info(): Promise<IpcResult<Info>>;
     listUiMods(): Promise<IpcResult<UiModEntry[]>>;
     readFile(relPath: string): Promise<IpcResult<string>>;
+    /** True when a file exists under the repo root (use before readFile for optional files). */
+    exists(relPath: string): Promise<IpcResult<boolean>>;
     writeFile(relPath: string, text: string): Promise<IpcResult<string>>;
     log(level: LogLevel, ...values: unknown[]): Promise<IpcResult<void>>;
     reload(): Promise<IpcResult<Info>>;

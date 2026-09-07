@@ -18,6 +18,7 @@
       info: () => invoke<Usermod.Info>("info"),
       listUiMods: () => invoke<Usermod.UiModEntry[]>("list-ui-mods"),
       readFile: (relPath) => invoke<string>("read-file", relPath),
+      exists: (relPath) => invoke<boolean>("exists", relPath),
       writeFile: (relPath, text) => invoke<string>("write-file", relPath, text),
       log: (level, ...values) => invoke<void>("log", level, ...values),
       reload: () => invoke<Usermod.Info>("reload"),

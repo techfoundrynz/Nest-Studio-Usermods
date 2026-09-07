@@ -522,7 +522,19 @@ function registerLoaderIpc(): void {
   };
   define("info", () => getInfo());
   define("list-ui-mods", () => listUiMods());
-  define("read-file", (relPath: unknown) => fs.readFileSync(resolveInside(relPath, ROOT_DIR), "utf8"));
+  // A missing optional file is a normal answer, not a loader error: report it without recording it.
+  ipcMain.removeHandler("usermod:read-file");
+  originalHandle("usermod:read-file", async (_event, relPath: unknown): Promise<Usermod.IpcResult<string>> => {
+    try {
+      const target = resolveInside(relPath, ROOT_DIR);
+      if (!fs.existsSync(target)) return { ok: false, message: `not found: ${path.relative(ROOT_DIR, target)}` };
+      return { ok: true, data: fs.readFileSync(target, "utf8") };
+    } catch (error) {
+      recordError("ipc:read-file", error);
+      return { ok: false, message: errorMessage(error) };
+    }
+  });
+  define("exists", (relPath: unknown) => fs.existsSync(resolveInside(relPath, ROOT_DIR)));
   define("write-file", (relPath: unknown, text: unknown) => {
     const target = resolveInside(relPath, DATA_DIR);
     fs.mkdirSync(path.dirname(target), { recursive: true });
