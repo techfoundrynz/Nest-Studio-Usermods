@@ -141,7 +141,7 @@ void (async () => {
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("job-notifier") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
   check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "camera-timelapse", "export-filename", "job-notifier", "machine-state", "project-backup", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "device-macros", "export-report", "gcode-lab", "iso-view", "job-notifier", "keyboard-jog", "mods-menu", "status-hud", "tool-change-assistant", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "device-macros", "export-report", "gcode-lab", "iso-view", "job-notifier", "keyboard-jog", "mods-menu", "status-hud", "tool-change-assistant", "tool-visual", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
 
   // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
   let dialogArgs: unknown[] = [];

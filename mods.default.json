@@ -137,6 +137,12 @@
       "zFeed": 600,
       "distance": 200,
       "requireDeviceTab": true
+    },
+    "tool-visual": {
+      "scaleLength": true,
+      "minLengthScale": 0.6,
+      "maxLengthScale": 2.5,
+      "hideWhenUnknown": false
     }
   }
 }

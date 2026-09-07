@@ -368,10 +368,13 @@ function patchPreload(file: string): void {
   }
   fs.writeFileSync(file, updated, "utf8");
 }
-/** Exposes the app's three.js SceneManager instances (globalThis.__usermodSceneManagers) for view mods. */
+/**
+ * Exposes the app's three.js SceneManager instances (globalThis.__usermodSceneManagers) for view mods, and the
+ * preview's toolpath simulation runtime (globalThis.__usermodSimRuntimes) for cutter/simulation mods.
+ */
+const SCENE_MARKER = "/* NEST-USERMOD-SCENE */";
+const SIM_MARKER = "/* NEST-USERMOD-SIMRUNTIME */";
 function patchScene(assetsDir: string): void {
-  const marker = "/* NEST-USERMOD-SCENE */";
-  const anchor = "this.cameraController.saveState();";
   const files = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).filter((f) => /^engine-3d-.*\.js$/.test(f)) : [];
   if (!files.length) {
     warn("engine-3d chunk not found; 3D view mods will be inactive");
@@ -379,18 +382,25 @@ function patchScene(assetsDir: string): void {
   }
   for (const name of files) {
     const file = path.join(assetsDir, name);
-    const source = fs.readFileSync(file, "utf8");
-    if (source.includes(marker)) {
-      step(`3D scene access already patched (${name})`);
-      continue;
+    let source = fs.readFileSync(file, "utf8");
+    const original = source;
+    // SceneManager constructor: right after it saves the initial camera state.
+    const sceneAnchor = "this.cameraController.saveState();";
+    if (!source.includes(SCENE_MARKER)) {
+      if (source.includes(sceneAnchor)) source = source.replace(sceneAnchor, `${sceneAnchor} (globalThis.__usermodSceneManagers ??= new Set()).add(this); ${SCENE_MARKER}`);
+      else warn(`3D scene anchor not found in ${name}; view mods will be inactive`);
     }
-    if (!source.includes(anchor)) {
-      warn(`3D scene anchor not found in ${name}; view mods will be inactive`);
-      continue;
+    // EditorToolpathSimulationRuntime constructor: the statement hiding the cutter, followed by resetRotary().
+    if (!source.includes(SIM_MARKER)) {
+      const simAnchor = /(this\.cuttingTool\.root\.visible = false;)(\s*\}\s*\}\s*resetRotary\(\) \{)/;
+      if (simAnchor.test(source)) source = source.replace(simAnchor, `$1 (globalThis.__usermodSimRuntimes ??= new Set()).add(this); ${SIM_MARKER}$2`);
+      else warn(`simulation runtime anchor not found in ${name}; cutter mods will be inactive`);
     }
-    fs.writeFileSync(file, source.replace(anchor, `${anchor} (globalThis.__usermodSceneManagers ??= new Set()).add(this); ${marker}`), "utf8");
-    assertParses(file);
-    step(`patched 3D scene access (${name})`);
+    if (source !== original) {
+      fs.writeFileSync(file, source, "utf8");
+      assertParses(file);
+      step(`patched 3D scene access (${name})`);
+    } else step(`3D scene access already patched (${name})`);
   }
 }
 function patchCsp(file: string): void {
@@ -414,7 +424,11 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
   if (!preload.includes(PRELOAD_BEGIN) || !preload.includes(PRELOAD_END)) problems.push("preload bridge block missing");
   if (!read("out/renderer/index.html").includes("script-src 'self' file:")) problems.push("CSP file: allowance missing");
   const engine = asarLib.list(archive).find((e) => /^out\/renderer\/assets\/engine-3d-.*\.js$/.test(e.path));
-  if (engine && !read(engine.path).includes("/* NEST-USERMOD-SCENE */")) warn("3D scene access marker missing from the engine chunk; view mods will report 'not patched in'");
+  if (engine) {
+    const chunk = read(engine.path);
+    if (!chunk.includes(SCENE_MARKER)) warn("3D scene access marker missing from the engine chunk; view mods will report 'not patched in'");
+    if (!chunk.includes(SIM_MARKER)) warn("simulation runtime marker missing from the engine chunk; tool-visual will be inactive");
+  }
   if (problems.length) fail(`packed archive failed verification:\n  - ${problems.join("\n  - ")}`);
   step("verified patches in the packed archive");
 }

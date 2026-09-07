@@ -83,6 +83,9 @@
       "path": "./mods/tool-change-guard/tsconfig.json"
     },
     {
+      "path": "./mods/tool-visual/tsconfig.json"
+    },
+    {
       "path": "./mods/ui-scale/tsconfig.main.json"
     },
     {

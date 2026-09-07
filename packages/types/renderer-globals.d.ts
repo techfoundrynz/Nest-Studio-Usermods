@@ -76,6 +76,34 @@ interface UsermodSceneManagerLike {
 }
 declare var __usermodSceneManagers: Set<UsermodSceneManagerLike> | undefined;
 
+/* The preview's toolpath simulation runtime (EditorToolpathSimulationRuntime), exposed by the installer's
+ * second scene patch. It owns the visible cutter and receives the per-path tool metadata. */
+interface UsermodToolMeta {
+  diameter?: number;
+  toolType?: string;
+  shankDiameter?: number;
+  bladeLength?: number;
+  tipAngleDeg?: number;
+}
+interface UsermodBox3Like {
+  min: UsermodVector3Like;
+  max: UsermodVector3Like;
+}
+interface UsermodCuttingToolLike {
+  root: { visible: boolean; scale: UsermodVector3Like };
+  mesh: { scale: UsermodVector3Like; geometry: { boundingBox: UsermodBox3Like | null } } | null;
+}
+interface UsermodSimRuntimeLike {
+  cuttingTool: UsermodCuttingToolLike | null;
+  manager: UsermodSceneManagerLike;
+  /** One G-code id per spatial sample, aligned with the sample index passed to the seek methods. */
+  getSpatialGcodeIds(): string[];
+  seekSpatialSample(sampleIndex: number): unknown;
+  seekStockRemoval(sampleIndex: number, options?: unknown): void;
+  resetStockRemoval(toolsByGcodeId: Map<string, UsermodToolMeta>): void;
+}
+declare var __usermodSimRuntimes: Set<UsermodSimRuntimeLike> | undefined;
+
 /* Sandboxed preload environment (loader/preload.ts only): Electron exposes a restricted require. */
 interface PreloadIpcRenderer {
   /** Electron's invoke resolves with whatever main returned; callers name the expected type. */

@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/tool-visual",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Sizes the preview's cutter model to the tool of the toolpath being simulated instead of one fixed bit",
+  "usermod": { "name": "tool-visual", "ui": "dist/index.js", "order": 14, "description": "Sizes the preview's cutter model to the tool of the toolpath being simulated instead of one fixed bit" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+}
