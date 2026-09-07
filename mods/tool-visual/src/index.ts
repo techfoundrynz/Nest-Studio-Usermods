@@ -52,19 +52,53 @@
     return d;
   }
 
+  /**
+   * Fallback tool source: the preview's toolpath list. The app only hands the scene a tool map when the
+   * material (stock-removal) simulation is active, but every list row carries data-gcode-id and a label
+   * like "T2~6mm" (plus the tool type name), whatever the view mode.
+   */
+  let domTools = new Map<string, UsermodToolMeta>();
+  function refreshDomTools(): void {
+    const next = new Map<string, UsermodToolMeta>();
+    for (const row of document.querySelectorAll<HTMLElement>("[data-gcode-id]")) {
+      const id = row.dataset.gcodeId;
+      if (!id) continue;
+      const text = row.textContent ?? "";
+      const match = /T(\d+)~([\d.]+)\s*mm/.exec(text);
+      if (!match) continue;
+      const diameter = Number(match[2]);
+      if (!(diameter > 0)) continue;
+      const meta: UsermodToolMeta = { diameter };
+      const type = /(ball|endmill|flat|cone|v-?bit|drill|tap|thread|球|平|锥|钻)/i.exec(text)?.[0];
+      if (type) meta.toolType = type;
+      next.set(id, meta);
+    }
+    domTools = next;
+  }
+  const warned = new Set<string>();
+
   function applyForSample(runtime: UsermodSimRuntimeLike, state: Hooked, sampleIndex: number): void {
     const tool = runtime.cuttingTool;
     if (!tool) return;
     const gcodeId = runtime.getSpatialGcodeIds()[Math.max(0, Math.floor(sampleIndex))] ?? null;
     if (gcodeId === state.lastGcodeId) return;
-    state.lastGcodeId = gcodeId;
-    const meta = gcodeId ? state.tools.get(gcodeId) : undefined;
     const base = baseDiameterOf(runtime, state);
+    if (!base) return; // bit STL still loading: leave lastGcodeId unset so the next seek retries
+    let meta = gcodeId ? state.tools.get(gcodeId) : undefined;
+    if (gcodeId && !meta?.diameter) {
+      if (!domTools.has(gcodeId)) refreshDomTools();
+      meta = domTools.get(gcodeId);
+    }
+    state.lastGcodeId = gcodeId;
     const diameter = meta?.diameter;
-    if (!base || !diameter || !(diameter > 0)) {
+    if (!diameter || !(diameter > 0)) {
       tool.root.scale.set(1, 1, 1);
       if (settings.hideWhenUnknown) tool.root.visible = false;
       runtime.manager.requestRender();
+      if (gcodeId && !warned.has(gcodeId)) {
+        warned.add(gcodeId);
+        rt.log("warn", `tool-visual: no tool diameter for toolpath ${gcodeId} (stock-removal map: ${state.tools.size} entries, list rows: ${domTools.size}); cutter left at default size`);
+      }
       return;
     }
     const radial = diameter / base;
