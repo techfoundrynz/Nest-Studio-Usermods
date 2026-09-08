@@ -85,7 +85,7 @@ packages/
   asar/        @neststudio-usermods/asar       dependency-free asar extract/pack/list/cat (library + nest-asar CLI)
   installer/   @neststudio-usermods/installer  interactive installer (tsx + prompts)
   ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms
-  react-runtime/ @neststudio-usermods/react-runtime  React 19 bundled (esbuild) as window.usermodReact for TSX mods
+  react-runtime/ @neststudio-usermods/react-runtime  React 19 + ReactDOM bundled (esbuild) as the globals React / ReactDOM + usermodReactRuntime.mount() for TSX mods
 mods/
   feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
   strip-comments, line-numbers                                                              (post-processors)
