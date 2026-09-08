@@ -142,21 +142,38 @@
     return mod;
   }
 
-  /* MODS menu registry: any UI mod can add an action; mods-menu renders them grouped by section. */
+  /* Legacy action registry: bundled mods own a toolbar button instead, and the UI kit lists whatever is
+   * registered here in the toolbar's overflow (ellipsis) menu, so older mods keep working. */
+  const menuListeners = new Set<() => void>();
+  const notifyMenu = (): void => {
+    for (const listener of menuListeners) {
+      try {
+        listener();
+      } catch (error) {
+        log("warn", "menu listener failed:", error);
+      }
+    }
+  };
   const menu: Usermod.Runtime["menu"] = {
-    addAction({ id, label, onClick, section = "Tools", title, order = 100 }) {
+    addAction({ id, label, onClick, section = "Tools", title, order = 100, icon }) {
       if (!id || !label || typeof onClick !== "function") throw new Error("menu.addAction needs id, label, onClick");
-      const action: Usermod.RegisteredMenuAction = { id, label, onClick, section, order, ...(title !== undefined ? { title } : {}) };
+      const action: Usermod.RegisteredMenuAction = { id, label, onClick, section, order, ...(title !== undefined ? { title } : {}), ...(icon !== undefined ? { icon } : {}) };
       const existing = menuActions.findIndex((a) => a.id === id);
       if (existing >= 0) menuActions[existing] = action;
       else menuActions.push(action);
+      notifyMenu();
     },
     removeAction(id) {
       const index = menuActions.findIndex((a) => a.id === id);
       if (index >= 0) menuActions.splice(index, 1);
+      notifyMenu();
     },
     actions() {
       return [...menuActions].sort((a, b) => a.section.localeCompare(b.section) || a.order - b.order || a.label.localeCompare(b.label));
+    },
+    onChange(callback) {
+      menuListeners.add(callback);
+      return () => void menuListeners.delete(callback);
     }
   };
 

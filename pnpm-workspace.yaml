@@ -8,3 +8,20 @@ allowBuilds:
   electron: false
   # tsx needs esbuild's platform binary check.
   esbuild: true
+
+# One version per third-party dependency for the whole workspace. Packages declare "catalog:" instead of a
+# version; bump here, then `pnpm install`. strict mode makes `pnpm add` refuse versions that bypass the catalog.
+catalogMode: strict
+catalog:
+  "@types/node": "22.20.1"
+  "@types/prompts": "2.4.9"
+  "@types/react": "19.2.18"
+  "@types/react-dom": "19.2.7"
+  "concurrently": "9.2.4"
+  "electron": "39.8.10"
+  "esbuild": "0.28.2"
+  "prompts": "2.4.2"
+  "react": "19.2.8"
+  "react-dom": "19.2.8"
+  "tsx": "4.23.13"
+  "typescript": "5.9.3"

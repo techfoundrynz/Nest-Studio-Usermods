@@ -3,8 +3,8 @@
   "version": "0.3.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Open log folders, CAM service status, API docs (main + UI)",
-  "usermod": { "name": "app-tools", "main": "dist/main.js", "ui": "dist/ui.js", "order": 20, "description": "Open log folders, CAM service status, API docs (main + UI)" },
+  "description": "Open log folders, CAM service status, API docs, developer shortcuts (Ctrl+Shift+M/R/L, F12)",
+  "usermod": { "name": "app-tools", "main": "dist/main.js", "ui": "dist/ui.js", "order": 20, "description": "Open log folders, CAM service status, API docs, developer shortcuts (Ctrl+Shift+M/R/L, F12)" },
   "scripts": { "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json", "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\"" },
   "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
 }

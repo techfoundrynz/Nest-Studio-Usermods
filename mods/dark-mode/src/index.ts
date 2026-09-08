@@ -38,26 +38,22 @@
 
   const handle = ui.toolbar.addButton({
     id: "dark-mode",
-    title: "Toggle dark mode",
+    title: "Toggle dark mode (right-click: settings)",
     icon: current() === "dark" ? ui.icons.sun : ui.icons.moon,
     order: 20,
-    onClick: toggleTheme
+    onClick: toggleTheme,
+    onContextMenu: () => openSettings()
   });
   const refreshIcon = (): void => {
     const dark = current() === "dark";
     handle.setIcon(dark ? ui.icons.sun : ui.icons.moon);
-    handle.setTitle(dark ? "Switch to light theme" : "Switch to dark theme");
+    handle.setTitle(`${dark ? "Switch to light theme" : "Switch to dark theme"} (right-click: settings)`);
   };
   new MutationObserver(refreshIcon).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   refreshIcon();
 
-  rt.menu.addAction({
-    id: "dark-mode-settings",
-    label: "Dark mode…",
-    section: "Appearance",
-    order: 10,
-    onClick: ({ close }) => {
-      close();
+  /** Settings sit on the button's right-click, so dark-mode keeps a single toolbar icon. */
+  function openSettings(): void {
       const modal = ui.modal("Dark mode", { width: 420 });
       modal.body.append(
         ui.kv([
@@ -75,8 +71,7 @@
           }
         })
       );
-    }
-  });
+  }
 
   async function applySystemPreference(): Promise<void> {
     if (!settings.followSystem) return;

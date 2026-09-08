@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-mods/tool-split",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Writes one extra program file per tool next to each multi-tool export, each with its own header and footer",
+  "usermod": {
+    "name": "tool-split",
+    "postprocessor": "dist/index.js",
+    "order": 95,
+    "description": "Writes one extra program file per tool next to each multi-tool export, each with its own header and footer"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}

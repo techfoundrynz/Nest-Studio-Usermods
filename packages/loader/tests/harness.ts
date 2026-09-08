@@ -4,6 +4,7 @@
  */
 import * as fs from "node:fs";
 import Module = require("node:module");
+import * as os from "node:os";
 import * as path from "node:path";
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown;
@@ -18,6 +19,7 @@ const arcWelder =
     ? "/Applications/Nest Studio.app/Contents/Resources/ArcWelder"
     : String.raw`C:\Program Files\nest-studio\resources\ArcWelder.exe`;
 if (fs.existsSync(arcWelder) && !process.env.NEST_ARCWELDER) process.env.NEST_ARCWELDER = arcWelder;
+process.env.USERMOD_HARNESS = "1"; // mods that open sockets (lan-monitor) stay quiet under test
 const webContentsHooks: ((event: unknown, contents: unknown) => void)[] = [];
 const fakeElectron = {
   app: {
@@ -61,6 +63,13 @@ const rootDir = path.resolve(__dirname, "..", "..", "..", "..");
 const configPath = path.join(rootDir, "mods.json");
 const originalConfig = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : null;
 fs.copyFileSync(path.join(rootDir, "mods.default.json"), configPath);
+// Seed an old-style entry so the loader's merge migration (keyboard-jog -> jog) is exercised on load.
+{
+  const seeded = JSON.parse(fs.readFileSync(configPath, "utf8")) as { enabled: string[]; settings: Record<string, unknown> };
+  seeded.enabled = ["keyboard-jog"];
+  seeded.settings["keyboard-jog"] = { feed: 1200, distance: 50 };
+  fs.writeFileSync(configPath, JSON.stringify(seeded, null, 2), "utf8");
+}
 process.on("exit", () => {
   if (originalConfig === null) fs.rmSync(configPath, { force: true });
   else fs.writeFileSync(configPath, originalConfig, "utf8");
@@ -89,10 +98,13 @@ void (async () => {
   // mods.default.json ships with nothing enabled; enable the bundled set for the rest of the run.
   check("loader root matches the repo root", path.resolve(loader.ROOT_DIR) === rootDir, loader.ROOT_DIR);
   const initial = data(await invoke<Usermod.Info>("usermod:info"));
-  check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
-  const enabledSet = initial.available.filter((m) => !m.core && !["strip-comments", "line-numbers"].includes(m.name)).map((m) => m.name);
+  check("nothing enabled by default except core (and the migrated jog)", initial.available.filter((m) => m.enabled).every((m) => m.core || m.name === "jog") && initial.available.some((m) => m.core && m.name === "mods-menu"));
+  const jogSettings = initial.config.settings["jog"] ?? {};
+  check("old keyboard-jog entry migrated into jog with renamed settings", initial.config.enabled.includes("jog") && !initial.config.enabled.includes("keyboard-jog") && jogSettings.keyboardFeed === 1200 && jogSettings.keyboardDistance === 50 && jogSettings.keyboardEnabled === true && initial.config.settings["keyboard-jog"] === undefined, JSON.stringify(jogSettings));
+  check("migration rewrote mods.json", !fs.readFileSync(configPath, "utf8").includes('"keyboard-jog"'));
+  const enabledSet = initial.available.filter((m) => !m.core).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
-  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 7 && enabledInfo.mainMods.length === 7, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 10 && enabledInfo.mainMods.length === 10, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
   check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
 
   let written: { filePath: string; data: string } | null = null;
@@ -124,6 +136,42 @@ void (async () => {
     check("arc-fit ran through ArcWelder and kept the program", /G1 X20(\.0+)? Y15(\.0+)?/.test(out2) && out2.includes("(File: two.nc)") && out2.trim().endsWith("M30"), out2.split("\n").slice(-3).join(" | "));
   } else console.log("SKIP arc-fit (ArcWelder not found)");
 
+  // peck-drill: a 15 mm straight plunge followed by a retract becomes 3 mm pecks; the profile plunge in `gcode` stays.
+  const drill = ["(header)", "G21 G90", "T1 M6", "S12000 M3", "G0 X5 Y5 Z5", "G1 Z-10 F200", "G0 Z5", "G1 X20 Y15 F800", "M30", ""].join("\n");
+  await invoke("store:write-file", `${downloads}drill.nc`, drill);
+  const pecked = written!.data;
+  check("peck-drill converts the drilling plunge", pecked.includes("(usermod peck-drill: 15 mm plunge") && (pecked.match(/^G1 Z/gm)?.length ?? 0) >= 5 && pecked.includes("G0 Z5") && pecked.includes("G1 X20 Y15 F800"), pecked.split("\n").slice(4, 14).join(" | "));
+  check("peck-drill leaves the profile plunge in the first program alone", !out.includes("(usermod peck-drill"));
+  // export-report checks: 18 mm stock from the header, a cut to Z-25 and a low rapid are reported, nothing is changed.
+  const deep = ['({"machineModel":"C500","stockSize":"600*400*18"})', "G21 G90", "G0 X0 Y0 Z5", "G1 Z-25 F300", "G1 X10 Y10", "G0 X50 Y50", "M30", ""].join("\n");
+  await invoke("store:write-file", `${downloads}deep.nc`, deep);
+  const guard = JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")) as { stockThickness: number | null; issues: { kind: string; count: number }[] };
+  check("export-report read the stock thickness from the header and flagged below-stock + low rapid", guard.stockThickness === 18 && guard.issues.some((i) => i.kind === "below-stock") && guard.issues.some((i) => i.kind === "low-rapid"), JSON.stringify(guard.issues));
+  check("export-report checks do not modify the program", written!.data.includes("G1 Z-25 F300") && !written!.data.includes("usermod depth"));
+  // tool-split: a real temp folder so the per-tool files can be written next to the export.
+  const splitDir = fs.mkdtempSync(path.join(os.tmpdir(), "usermod-split-"));
+  await invoke("store:write-file", path.join(splitDir, "three.nc"), twoTools);
+  const parts = fs.readdirSync(splitDir).sort();
+  const partT2 = parts.includes("three-T2.nc") ? fs.readFileSync(path.join(splitDir, "three-T2.nc"), "utf8") : "";
+  check("tool-split wrote one file per tool section", JSON.stringify(parts) === JSON.stringify(["three-T1.nc", "three-T2.nc"]), parts.join(","));
+  check("tool-split part files carry the preamble, their section and a footer", partT2.startsWith("(header line 1)") && partT2.includes("T2 M6") && partT2.includes("G1 X0 Y0") && partT2.trim().endsWith("M30") && !partT2.includes("G1 X20 Y15"), partT2.split("\n").slice(0, 6).join(" | "));
+  const splitLines = written!.data.split("\n");
+  const indexAt = splitLines.findIndex((l) => l.startsWith("(usermod tool-split: per-tool files"));
+  const firstCode = splitLines.findIndex((l) => l.trim() !== "" && !l.startsWith("("));
+  check("tool-split adds an index comment inside the header block", indexAt > 0 && indexAt < firstCode, splitLines.slice(0, 8).join(" | "));
+  fs.rmSync(splitDir, { recursive: true, force: true });
+
+  // toolpath-modifiers: the preview stage runs only the chosen processors and marks the G-code; export then skips them.
+  await invoke("usermod:set-settings", "toolpath-modifiers", { preview: ["peck-drill"] });
+  const previewed = data(await invoke<string>("usermod:run-postprocessors", "preview", drill, { endpoint: "/api/drillPath" }));
+  check("preview stage applies the chosen processor and leaves a marker", previewed.startsWith("(usermod-preview-applied: peck-drill)") && previewed.includes("(usermod peck-drill: 15 mm plunge") && !previewed.includes("(--- Nest Studio usermod ---)"), previewed.split("\n").slice(0, 3).join(" | "));
+  await invoke("store:write-file", `${downloads}previewed.nc`, previewed);
+  check("export skips processors already applied at preview", (written!.data.match(/\(usermod peck-drill: /g)?.length ?? 0) === 1 && written!.data.includes("(--- Nest Studio usermod ---)"), written!.data.split("\n").slice(0, 4).join(" | "));
+  const modStatus = data(await invoke<{ intercepting: boolean; reason: string | null }>("usermod:modifiers:status"));
+  check("toolpath-modifiers stays passive under the harness", modStatus.intercepting === false && modStatus.reason === "harness run", JSON.stringify(modStatus));
+  await invoke("usermod:set-settings", "toolpath-modifiers", { preview: [] });
+  await invoke("store:write-file", `${downloads}two.nc`, big); // later checks read the report of the last two-tool export
+
   written = null;
   await invoke("store:write-file", `${USER_DATA}${sep}gcode-work${sep}checkGcode.nc`, gcode);
   check("internal userData path untouched", written!.data === gcode);
@@ -140,14 +188,14 @@ void (async () => {
   check("send stage passes through (bundled pps are export-only)", sent!.gcode === gcode && sent!.gcodeRunTime === 5);
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
-  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "export-copy", "export-report"]), info.postprocessors.map((p) => p.name).join(","));
+  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-override", "arc-fit", "tool-change-guard", "program-header", "safe-shutdown", "peck-drill", "gcode-format", "tool-split", "export-copy", "export-report"]), info.postprocessors.map((p) => p.name).join(","));
   check("export-report wrote latest.json", fs.existsSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json")) && JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")).tools.includes(2));
-  check("mods left out of enabled are not loaded", !info.postprocessors.some((p) => ["strip-comments", "line-numbers"].includes(p.name)));
-  check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "strip-comments")?.enabled === false && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
+  check("gcode-format is a no-op until one of its features is switched on", !out.includes("N10 ") && out.includes("(File: part.nc)"));
+  check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "mods-menu")?.core === true && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
-  check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("job-notifier") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
-  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "camera-timelapse", "export-filename", "job-notifier", "machine-state", "project-backup", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "dark-mode", "dev-shortcuts", "device-macros", "export-report", "gcode-lab", "iso-view", "job-notifier", "keyboard-jog", "mods-menu", "status-hud", "tool-change-assistant", "tool-visual", "ui-scale"]), info.uiMods.map((m) => m.name).join(","));
+  check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("dark-mode") === "ui" && reloadOf("jobs") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "camera-timelapse", "export-filename", "final-geometry", "jobs", "lan-monitor", "machine-state", "project-backup", "toolpath-modifiers", "ui-scale"]), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "cycles", "dark-mode", "device-macros", "export-report", "feeds-speeds", "final-geometry", "gcode-lab", "iso-view", "jobs", "jog", "lan-monitor", "live-override", "mods-menu", "status-hud", "tool-change-assistant", "tool-library", "tool-visual", "toolpath-color", "toolpath-modifiers", "ui-scale", "work-offsets", "z-probe"]), info.uiMods.map((m) => m.name).join(","));
 
   // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
   let dialogArgs: unknown[] = [];
@@ -174,15 +222,22 @@ void (async () => {
   const zoom = data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 1.25));
   check("ui-scale clamps and reports zoom", zoom.zoom === 1.25 && data(await invoke<{ zoom: number }>("usermod:ui-scale:set-zoom", 9)).zoom === 2);
 
-  // job-notifier: gcode-sent event recorded the job; a machine_status stream via webContents.send is observed.
-  const status1 = data(await invoke<{ fileName: string | null; totalLines: number | null; phase: string }>("usermod:notifier:status"));
-  check("job-notifier saw gcode-sent", status1.fileName === "a.nc" && status1.totalLines === 10 && status1.phase === "running", JSON.stringify(status1));
-  check("main mods hooked web-contents-created (job-notifier, ui-scale, machine-state, camera-timelapse)", webContentsHooks.length === 4, String(webContentsHooks.length));
+  // jobs: gcode-sent event recorded the job; machine status arrives through the machine-state in-process event.
+  const status1 = data(await invoke<{ fileName: string | null; totalLines: number | null; phase: string }>("usermod:jobs:status"));
+  check("jobs saw gcode-sent", status1.fileName === "a.nc" && status1.totalLines === 10 && status1.phase === "running", JSON.stringify(status1));
+  check("main mods hooked web-contents-created (ui-scale, machine-state, camera-timelapse, lan-monitor)", webContentsHooks.length === 4, String(webContentsHooks.length));
   const fakeContents = { send: (_channel: string, ..._args: unknown[]) => undefined, on: (_event: string, _listener: unknown) => undefined, getURL: () => "file:///renderer/index.html" };
   for (const hook of webContentsHooks) hook({}, fakeContents);
-  fakeContents.send("device:stream-event", { type: "machine_status", payload: { status: "Hold", Ln: 42 } });
-  const status2 = data(await invoke<{ phase: string; lastLine: number | null }>("usermod:notifier:status"));
-  check("job-notifier tracks machine status", status2.phase === "paused" && status2.lastLine === 42, JSON.stringify(status2));
+  fakeContents.send("device:stream-event", { type: "machine_status", payload: { status: "Hold", Ln: 42, MPos: "-10.5,-20,-3.25", WPos: "0,0,-1", FS: "500,12000", G: 55, T: "2" } });
+  fakeContents.send("device:stream-event", { type: "console_line", line: "error:9 G-code locked out during alarm or jog state" });
+  const status2 = data(await invoke<{ phase: string; lastLine: number | null }>("usermod:jobs:status"));
+  check("jobs follows machine status through the machine-state event", status2.phase === "paused" && status2.lastLine === 42, JSON.stringify(status2));
+  const ms2 = data(await invoke<Usermod.MachineState>("usermod:machine:state"));
+  check("machine-state parses MPos/WPos/FS/G/T and keeps the last error line", ms2.mpos?.x === -10.5 && ms2.mpos?.z === -3.25 && ms2.wpos?.z === -1 && ms2.feed === 500 && ms2.spindle === 12000 && ms2.wcs === 55 && ms2.tool === "2" && ms2.lastError?.line.startsWith("error:9") === true, JSON.stringify({ mpos: ms2.mpos, feed: ms2.feed, wcs: ms2.wcs, err: ms2.lastError }));
+  const jobs = data(await invoke<{ fileName: string; outcome: string; tools: string[] }[]>("usermod:jobs:list"));
+  check("jobs history recorded the sent program", jobs[0]?.fileName === "a.nc" && jobs[0].outcome === "running" && jobs[0].tools.includes("T1"), JSON.stringify(jobs[0]));
+  const monitor = data(await invoke<{ listening: boolean; urls: string[]; port: number }>("usermod:monitor:status"));
+  check("lan-monitor stays quiet under the harness but reports its addresses", monitor.listening === false && monitor.port === 9640 && monitor.urls.length > 0, JSON.stringify(monitor));
   check("mods-menu first ui mod (order 10)", info.uiMods[0]?.name === "mods-menu");
   check("builtin runtime entries hidden from info", !info.uiMods.some((m) => m.builtin));
   const ui = data(await invoke<Usermod.UiModEntry[]>("usermod:list-ui-mods"));
@@ -221,7 +276,7 @@ void (async () => {
   const rp = data(await invoke<string>("usermod:run-postprocessors", "export", gcode, { fileName: "x.nc" }));
   check("run-postprocessors manual", rp.includes("(File: x.nc)"));
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
-  check("reload ok", rl.postprocessors.length === 7);
+  check("reload ok", rl.postprocessors.length === 10);
   fs.rmSync(path.join(loader.ROOT_DIR, "data", "reports"), { recursive: true, force: true });
 
   const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings|set-enabled)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));

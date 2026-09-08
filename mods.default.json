@@ -19,22 +19,10 @@
       "maxSpindle": null,
       "materials": {}
     },
-    "strip-comments": {
-      "keepHeader": true,
-      "removeBlankLines": true
-    },
-    "line-numbers": {
-      "start": 10,
-      "step": 10,
-      "skipComments": true
-    },
     "export-copy": {
       "targetDir": "",
       "subfolderByDate": false,
       "overwrite": true
-    },
-    "dev-shortcuts": {
-      "reload": true
     },
     "dark-mode": {
       "followSystem": false
@@ -54,15 +42,6 @@
       "pause": false,
       "skipFirst": true,
       "treatTAsChange": false
-    },
-    "job-notifier": {
-      "notifyComplete": true,
-      "notifyError": true,
-      "notifyPause": true,
-      "minRunSeconds": 20,
-      "settleSeconds": 3,
-      "webhookUrl": "",
-      "silent": false
     },
     "ui-scale": {
       "zoom": 1,
@@ -130,19 +109,122 @@
       "targetDir": ""
     },
     "export-report": {
-      "keep": 50
-    },
-    "keyboard-jog": {
-      "feed": 1500,
-      "zFeed": 600,
-      "distance": 200,
-      "requireDeviceTab": true
+      "keep": 50,
+      "stockThickness": null,
+      "useHeaderStock": true,
+      "allowanceBelow": 0.5,
+      "safeZ": 2,
+      "checkRapids": true,
+      "xMin": null,
+      "xMax": null,
+      "yMin": null,
+      "yMax": null
     },
     "tool-visual": {
       "scaleLength": true,
       "minLengthScale": 0.6,
       "maxLengthScale": 2.5,
       "hideWhenUnknown": false
+    },
+    "cycles": {
+      "safeZ": 5,
+      "rpm": 12000
+    },
+    "peck-drill": {
+      "peckDepth": 3,
+      "minDepth": 4,
+      "retract": "full",
+      "partialRetract": 1,
+      "clearance": 0.5,
+      "dwellSeconds": 0,
+      "onlyDrillMoves": true
+    },
+    "tool-split": {
+      "suffix": "-{tool}",
+      "minSections": 2,
+      "retractGcode": "G53 G90 G0 Z-1",
+      "indexComment": true
+    },
+    "live-override": {
+      "format": "hex-text"
+    },
+    "z-probe": {
+      "plateThickness": 10,
+      "probeFeed": 100,
+      "fastFeed": 300,
+      "twoStage": true,
+      "maxTravel": 30,
+      "retract": 5,
+      "timeoutSeconds": 60,
+      "offerAtToolChange": true
+    },
+    "work-offsets": {
+      "positions": [],
+      "travelRetract": "G53 G90 G0 Z-1",
+      "confirmGoTo": true
+    },
+    "lan-monitor": {
+      "port": 9640,
+      "host": "0.0.0.0",
+      "token": "",
+      "camera": "overall"
+    },
+    "feeds-speeds": {
+      "maxRpm": 24000,
+      "favourites": []
+    },
+    "toolpath-color": {
+      "mode": "depth",
+      "highlight": true
+    },
+    "final-geometry": {
+      "toleranceMm": 0.1,
+      "hideOutside": false,
+      "exportStride": 1
+    },
+    "toolpath-modifiers": {
+      "preview": [],
+      "camPort": 9630,
+      "maxBytes": 67108864
+    },
+    "jog": {
+      "keyboardEnabled": true,
+      "keyboardFeed": 1500,
+      "keyboardZFeed": 600,
+      "keyboardDistance": 200,
+      "gamepadMaxFeed": 3000,
+      "gamepadZFeed": 800,
+      "deadzone": 0.2,
+      "invertY": false,
+      "stepMs": 100,
+      "requireDeviceTab": true
+    },
+    "gcode-format": {
+      "stripComments": false,
+      "keepHeader": true,
+      "removeBlankLines": true,
+      "lineNumbers": false,
+      "start": 10,
+      "step": 10,
+      "skipComments": true
+    },
+    "jobs": {
+      "notifyComplete": true,
+      "notifyError": true,
+      "notifyPause": true,
+      "minRunSeconds": 20,
+      "settleSeconds": 3,
+      "webhookUrl": "",
+      "silent": false,
+      "keep": 500
+    },
+    "app-tools": {
+      "shortcuts": true,
+      "reloadShortcut": true
+    },
+    "mods-menu": {
+      "toolbarMaxVisible": 5,
+      "toolbarPinned": []
     }
   }
 }

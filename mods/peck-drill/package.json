@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-mods/peck-drill",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Turns deep straight plunges (drilling moves) into peck cycles with chip-clearing retracts",
+  "usermod": {
+    "name": "peck-drill",
+    "postprocessor": "dist/index.js",
+    "order": 35,
+    "description": "Turns deep straight plunges (drilling moves) into peck cycles with chip-clearing retracts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}

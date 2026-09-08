@@ -80,13 +80,12 @@
     true
   );
 
-  rt.menu.addAction({
+  ui.toolbar.addButton({
     id: "ui-scale",
-    label: "UI scale…",
-    section: "Appearance",
-    order: 20,
-    onClick: ({ close }) => {
-      close();
+    title: "UI scale and density",
+    icon: () => ui.icons.svg("M4 4h7v2H6v5H4V4zm9 0h7v7h-2V6h-5V4zM4 13h2v5h5v2H4v-7zm14 0h2v7h-7v-2h5v-5z"),
+    order: 22,
+    onClick: () => {
       const modal = ui.modal("UI scale", { width: 420 });
       const zoomSelect = ui.select(
         "Zoom",

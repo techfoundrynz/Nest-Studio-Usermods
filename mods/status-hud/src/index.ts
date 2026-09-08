@@ -97,8 +97,5 @@
   });
   window.usermod.on<State>("machine:state", render);
   setInterval(() => void window.usermod.invoke<State>("machine:state").then((s) => s.ok && render(s.data)), 5000);
-  rt.menu.addAction({ id: "status-hud", label: "Machine status…", section: "Machine", order: 5, onClick: ({ close }) => {
-    close();
-    details();
-  } });
+  ui.toolbar.addButton({ id: "status-hud", title: "Machine status details", icon: () => ui.icons.svg("M12 4a9 9 0 0 1 9 9 1 1 0 0 1-1 1H4a1 1 0 0 1-1-1 9 9 0 0 1 9-9zm5 4.6-4.3 4.3 1.4 1.4 4.3-4.3-1.4-1.4z"), order: 28, onClick: () => details() });
 })();

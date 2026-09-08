@@ -12,6 +12,10 @@ interface Window {
   usermodMenu?: { toggle(): Promise<void>; close(): void };
   usermodGcodeLab?: { open(): () => void };
   usermodDarkMode?: { setTheme(theme: NestStudio.Theme): Promise<void>; toggle(): Promise<void>; current(): NestStudio.Theme };
+  /** z-probe mod: run the Z touch-plate cycle from other mods (tool-change-assistant offers it). */
+  usermodZProbe?: { run(): Promise<void>; enabled(): boolean };
+  /** cycles mod: open the generator dialog on a given tab. */
+  usermodCycles?: { open(tab?: "thread" | "hole" | "surface"): void };
 }
 
 /* Minimal view of the app's three.js scene managers, exposed by the installer's scene patch
@@ -67,10 +71,49 @@ interface UsermodCameraControllerLike {
   reset(): void;
   emit?(type: string): void;
 }
+interface UsermodMatrix4Like {
+  elements: ArrayLike<number>;
+  copy(m: UsermodMatrix4Like): UsermodMatrix4Like;
+}
+/** Material surface a mod may read or build (constructor reachable from any existing mesh's material). */
+interface UsermodMaterialLike {
+  visible: boolean;
+  transparent: boolean;
+  opacity: number;
+  dispose(): void;
+  readonly constructor: UsermodMaterialCtor;
+}
+type UsermodMaterialCtor = new (parameters?: Record<string, unknown>) => UsermodMaterialLike;
+/** Enough of three.js Object3D to walk the scene graph, recolour toolpath lines and add meshes of our own. */
+interface UsermodObject3DLike {
+  name: string;
+  type: string;
+  visible: boolean;
+  renderOrder: number;
+  userData: Record<string, unknown>;
+  children: UsermodObject3DLike[];
+  parent: UsermodObject3DLike | null;
+  position: UsermodVector3Like;
+  matrix: UsermodMatrix4Like;
+  matrixWorld: UsermodMatrix4Like;
+  matrixAutoUpdate: boolean;
+  geometry?: UsermodGeometryLike;
+  material?: UsermodMaterialLike;
+  traverse(callback: (object: UsermodObject3DLike) => void): void;
+  getObjectByName(name: string): UsermodObject3DLike | undefined;
+  add(...objects: UsermodObject3DLike[]): UsermodObject3DLike;
+  remove(...objects: UsermodObject3DLike[]): UsermodObject3DLike;
+  updateMatrixWorld(force?: boolean): void;
+  /** Object3D / Group / Mesh constructors are reachable from instances (three.js is not a global). */
+  readonly constructor: UsermodObject3DCtor;
+}
+/** Constructing with (geometry, material) makes a Mesh; with no arguments a Group / Object3D. */
+type UsermodObject3DCtor = new (geometry?: UsermodGeometryLike, material?: UsermodMaterialLike) => UsermodObject3DLike;
 interface UsermodSceneManagerLike {
   camera: UsermodCameraLike;
   cameraController: UsermodCameraControllerLike;
   renderer: { domElement: HTMLCanvasElement };
+  scene: UsermodObject3DLike;
   disposed?: boolean;
   requestRender(): void;
 }
@@ -93,15 +136,21 @@ interface UsermodBox3Like {
 interface UsermodBufferAttributeLike {
   array: ArrayLike<number>;
   itemSize: number;
+  count?: number;
+  normalized?: boolean;
+  needsUpdate?: boolean;
+  readonly constructor: UsermodAttributeCtor;
 }
 interface UsermodGeometryLike {
   boundingBox: UsermodBox3Like | null;
+  index: UsermodBufferAttributeLike | null;
   getAttribute(name: string): UsermodBufferAttributeLike | undefined;
   setAttribute(name: string, attribute: UsermodBufferAttributeLike): UsermodGeometryLike;
   setIndex(index: number[]): UsermodGeometryLike;
   computeVertexNormals(): void;
   computeBoundingBox(): void;
   dispose(): void;
+  readonly constructor: UsermodGeometryCtor;
 }
 type UsermodGeometryCtor = new () => UsermodGeometryLike;
 type UsermodAttributeCtor = new (array: Float32Array, itemSize: number) => UsermodBufferAttributeLike;
@@ -109,13 +158,45 @@ interface UsermodCuttingToolLike {
   root: { visible: boolean; scale: UsermodVector3Like };
   mesh: { scale: UsermodVector3Like; geometry: UsermodGeometryLike } | null;
 }
+/* Stock removal (material simulation): a Z-dexel height field, stock-centred in XY, top of stock at Z = 0. */
+interface UsermodDexelBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+interface UsermodDexelSpec {
+  bounds: UsermodDexelBounds;
+  resolutionMm: number;
+  nx: number;
+  ny: number;
+}
+interface UsermodDexelVolumeLike {
+  /** Top Z of every column (row-major, index = iy * nx + ix); bounds.minZ where the column is cut through. */
+  fillTopHeights(out: Float32Array): void;
+  serialize(): Float32Array;
+}
+interface UsermodStockRemovalLike {
+  /** Group holding the app's own machined-stock meshes; added to manager.scene at identity. */
+  group: UsermodObject3DLike;
+  volume: UsermodDexelVolumeLike | null;
+  spec: UsermodDexelSpec | null;
+  timeline: { stock?: { width: number; length: number; thickness: number } } | null;
+  getSampleIndex(): number;
+  timelineSampleCount(): number;
+  isActive(): boolean;
+}
 interface UsermodSimRuntimeLike {
   cuttingTool: UsermodCuttingToolLike | null;
   manager: UsermodSceneManagerLike;
+  stockRemoval: UsermodStockRemovalLike | null;
   /** One G-code id per spatial sample, aligned with the sample index passed to the seek methods. */
   getSpatialGcodeIds(): string[];
   seekSpatialSample(sampleIndex: number): unknown;
-  seekStockRemoval(sampleIndex: number, options?: unknown): void;
+  /** { sync: true, refineNormals: true } is the app's own "settle" path; huge indices clamp to the last sample. */
+  seekStockRemoval(sampleIndex: number, options?: { sync?: boolean; refineNormals?: boolean }): void;
   resetStockRemoval(toolsByGcodeId: Map<string, UsermodToolMeta>): void;
 }
 declare var __usermodSimRuntimes: Set<UsermodSimRuntimeLike> | undefined;

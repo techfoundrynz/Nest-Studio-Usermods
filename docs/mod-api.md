@@ -56,8 +56,16 @@ export = mod;
 ```
 
 `Usermod.PostprocessorContext<S>`: `stage`, `filePath` and `fileName` (export), `fileName` and `channel`
-(send), `internal`, `settings: Partial<S>`, `dataDir`, `log()`, `warn()`. Processors run sequentially;
-each receives the previous output. Errors are logged and the chain continues with the unmodified text.
+(send), `endpoint` (preview), `internal`, `settings: Partial<S>`, `dataDir`, `log()`, `warn()`. Processors
+run sequentially; each receives the previous output. Errors are logged and the chain continues with the
+unmodified text.
+
+Stages: `export` and `send` are chosen by the processor's `stages`. `preview` is chosen by the user in the
+toolpath-modifiers mod (settings `toolpath-modifiers.preview`, a list of processor names): those run on every
+toolpath the CAM service returns, one operation's G-code at a time, so the Preview tab, the saved project and
+the export all carry the result. The loader prefixes such G-code with `(usermod-preview-applied: a, b)` and
+skips the named processors again at export and send. Whole-program processors (headers, footers, file
+splitting, reports) belong at export.
 
 ## UI mods (renderer)
 
@@ -75,7 +83,7 @@ Classic scripts (an IIFE per file) injected after the UI runtime. Globals are ty
 | `el(tag, props, children)` | typed element builder (`class`, `text`, `html`, `style`, `onClick`…) |
 | `toast(msg, { kind, duration })` | `info`, `success`, `warn`, `error` |
 | `modal(title, { width })` | returns `{ root, body, close }`; Escape/backdrop close |
-| `menu.addAction({ id, label, section, order, title, onClick({ close, refresh }) })` | add a button to the MODS panel |
+| `menu.addAction({ id, label, section, order, title, icon, onClick({ close, refresh }) })` | legacy: listed in the toolbar overflow menu under its section heading. New mods should own a toolbar button instead |
 | `cam.version()`, `cam.postForm(endpoint, fields)` | CAM service client (`127.0.0.1:9630`) |
 | `formatDuration(s)`, `formatBytes(n)` | formatting helpers |
 | `api` | alias of `window.api` (the app's own preload API, `NestStudio.Api`) |
@@ -87,7 +95,9 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 
 | Member | Purpose |
 | --- | --- |
-| `toolbar.addButton({ id, title, icon, onClick, order })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove` |
+| `toolbar.addButton({ id, title, icon, onClick, order, onContextMenu, pinned })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove`. `onContextMenu` is the right-click action (usually settings; say so in `title`) |
+| `toolbar.setMaxVisible(n)` / `maxVisible()` / `setPinned(ids)` / `pinned()` / `entries()` | how many icons stay in the bar (default 5) and which mods keep a slot; `entries()` reports what is visible |
+| `menu(anchor, items, { width, align })` | popover of clickable rows (`{ label, onClick, icon, title, hint, disabled }`, or `{ heading }` to group); the toolbar's overflow menu is one of these |
 | `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
 | `modal(title, { width, onClose })` | centred dialog (`{ root, body, close, isOpen }`) |
 | `button(label, onClick, { primary, title, disabled })`, `buttonRow([...])` | buttons; async errors become toasts |
@@ -97,6 +107,14 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 | `icons.puzzle() / moon() / sun() / gear()`, `icons.svg(pathData)` | 22 px inline SVG icons |
 
 Styles key off the app's `html[data-theme]`, so kit UI follows the app's light/dark theme.
+
+**One icon per mod.** Every bundled mod with UI registers exactly one toolbar button. A mod with several
+actions (app-tools) opens `ui.menu` from its button; a mod whose click is a direct action (dark-mode,
+iso-view) puts its settings on `onContextMenu`. The bar shows at most `toolbar.maxVisible()` usermod icons
+(default 5, from `mods.json` `settings.mods-menu.toolbarMaxVisible`) and collapses the rest into an ellipsis
+button whose menu lists the hidden mods plus any legacy `rt.menu.addAction` entries.
+`settings.mods-menu.toolbarPinned`, edited in the MODS panel, keeps chosen mods in the bar whatever their
+`order`; mods-menu pins itself first.
 
 ```ts
 const ui = window.usermodUI;
@@ -123,7 +141,7 @@ Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: fa
 paths only; goes through the post-processor hook), `shell.openExternal(url)` (allow-listed hosts only).
 
 The CSP allows scripts from `file:` and network access to the CAM service only. Bundled UI mods:
-`mods-menu`, `dark-mode`, `gcode-lab`, `app-tools`, `dev-shortcuts`.
+`mods-menu`, `dark-mode`, `gcode-lab`, `app-tools` (which also carries the developer shortcuts).
 
 Theme note: Nest Studio applies `data-theme="light|dark"` on `<html>` from `app.theme` in the user
 store and ships full token sets for both. `dark-mode` switches it by writing the store through
@@ -175,12 +193,12 @@ function Panel(): React.JSX.Element {
   const m = useMachineState();
   return <Section title="Machine">{m ? <KV pairs={[["Status", m.status ?? "—"]]} /> : "no data"}</Section>;
 }
-rt.menu.addAction({ id: "x", label: "Panel…", onClick: ({ close }) => { close(); ui.react.modal("Machine", <Panel />, { width: 420 }); } });
+ui.toolbar.addButton({ id: "x", title: "Machine panel", icon: () => ui.icons.svg("M4 4h16v12H4z"), order: 50, onClick: () => ui.react.modal("Machine", <Panel />, { width: 420 }) });
 ```
 
 References: `mods/mods-menu` (menu panel + Mods… dialog), `mods/gcode-lab` (drop zone, async actions),
-`mods/device-macros` (popover + editor form), `mods/job-notifier` and `mods/export-report` (small panels).
-Small DOM-patching mods (dark-mode, iso-view, status-hud, keyboard-jog, tool-visual) stay imperative on purpose.
+`mods/device-macros` (popover + editor form), `mods/jobs` and `mods/export-report` (panels with settings forms).
+Small DOM-patching mods (dark-mode, iso-view, status-hud, tool-visual) stay imperative on purpose.
 
 ## Main mods (main process)
 
@@ -197,8 +215,11 @@ export = mod;
 
 `Usermod.MainModApi<S>`: `name`, `electron`, `app`, `modDir`, `distDir`, `dataDir`, `settings`,
 `whenReady()`, `log/warn/error`, `handle(channel, fn)`, `send(channel, payload)`, `getMainWindow()`,
-`events`, `readStore()`, `runPostprocessors()`. Handler results become `{ ok: true, data }`, thrown errors
-`{ ok: false, message }`. Main mods have full Node access and load once at startup.
+`events`, `readStore()`, `runPostprocessors()`, `call<T>(channel, ...args)`. Handler results become
+`{ ok: true, data }`, thrown errors `{ ok: false, message }`. Main mods have full Node access and load once
+at startup. `api.call` invokes another main mod's handler in-process (e.g.
+`api.call<Usermod.MachineState>("machine:state")`), so mods can build on each other without IPC; it rejects
+when no active mod handles the channel.
 
 `api.events.on(name, listener)` subscribes to loader events (`Usermod.LoaderEvents`):
 `gcode-sent` `{ channel, fileName, lines, bytes, runTimeSeconds?, gcode }` after G-code goes to the
@@ -211,20 +232,33 @@ skipped. Examples in the bundled mods: `export-filename` rewrites `dialog:show-s
 Channel names come from the app's preload (`out/preload/index.js`); the loader's `usermod.log` and the
 IPC inspector idea in the README are the way to discover more.
 
-The `machine-state` mod turns the device stream into `machine:state` (invoke for current, `usermod.on`
-for updates): `{ connected, status, alarm, phase, line, job: { fileName, lines, runTimeSeconds, startedAt,
-toolChanges }, elapsedSeconds, progress, etaSeconds }`. Build on it rather than parsing status frames again.
+The `machine-state` mod turns the device stream into `machine:state` (`Usermod.MachineState`; invoke for
+current, `usermod.on` for updates): `{ connected, status, alarm, phase, line, job: { fileName, lines,
+runTimeSeconds, startedAt, toolChanges }, elapsedSeconds, progress, etaSeconds, mpos, wpos, wcs, feed,
+spindle, tool, lastError }`. `machine:console` (`Usermod.MachineConsoleLine`) carries error, alarm and probe
+result lines only. Build on these rather than parsing status frames again; `useMachineState()` in the kit
+subscribes for React components.
+
+Machine dialect notes (Nest Studio 1.1): the app sends realtime commands spelled out as text (`"0x85"` for
+jog cancel), zeroes with `G10 L20 P<G-53> …` where `G` is the active WCS from the status frame, homes with
+`$H`, and jogs with `$J=G21G91…F…`. Status frames carry `MPos`, `WPos`, `FS`, `Ln`, `G`, `T` and machine
+specific `MS` flags.
 
 3D scene access: the installer exposes the app's three.js `SceneManager` instances as
 `globalThis.__usermodSceneManagers` (typed minimally as `UsermodSceneManagerLike`); `mods/iso-view` shows
 how to drive the app's `CameraController` (target, distance, orientation quaternion) safely. To observe what
 the app streams to its renderer (machine status, console lines), wrap `webContents.send` from
-`app.on("web-contents-created")` as `mods/job-notifier` does; the `device:stream-event` payloads of
+`app.on("web-contents-created")` as `mods/machine-state` does (and then prefer `api.events.on("machine-state")`
+over doing it again); the `device:stream-event` payloads of
 type `machine_status` carry `status` (`Idle`, `Run`, `Hold`, `Alarm`, …) and the line counter `Ln`.
 
 Bundled: `app-tools` (`tools:ping`, `tools:open-logs`, `tools:open-userdata`, `tools:open-usermod-log`,
-`tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`) and `job-notifier`
-(`notifier:status`, `notifier:test`, `notifier:reload-settings`; emits `job-notifier:event` to the UI).
+`tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`) and `jobs` (`jobs:status`,
+`jobs:test`, `jobs:reload-settings`, `jobs:list`, `jobs:clear`, `jobs:export-csv`, `jobs:open`; emits
+`jobs:event` and `jobs:changed` to the UI). Mods that were merged (keyboard-jog + gamepad-jog into jog,
+depth-guard into export-report, dev-shortcuts into app-tools, strip-comments + line-numbers into gcode-format,
+job-notifier + job-history into jobs) are migrated from an old mods.json automatically: the old name enables
+the new mod and its settings are carried over.
 
 ## Loader internals
 

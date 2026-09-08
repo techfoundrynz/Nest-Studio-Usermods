@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-mods/gcode-format",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Program text formatting on export: strip comments and blank lines, add N line numbers (each switchable)",
+  "usermod": {
+    "name": "gcode-format",
+    "postprocessor": "dist/index.js",
+    "order": 40,
+    "description": "Program text formatting on export: strip comments and blank lines, add N line numbers (each switchable)"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/feeds-speeds",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Feeds and speeds calculator: chip load per material against the tool library, with saved favourites",
+  "usermod": {
+    "name": "feeds-speeds",
+    "ui": "dist/index.js",
+    "order": 36,
+    "description": "Feeds and speeds calculator: chip load per material against the tool library, with saved favourites"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

@@ -23,6 +23,19 @@ export const STYLE = `#${TOOLBAR_ID}{display:contents}
 .usermod-toggle input{width:16px;height:16px;accent-color:#0f766e}
 .usermod-kv{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px}.usermod-kv dt{color:#666}.usermod-kv dd{margin:0}
 .usermod-err{color:#b3261e}.usermod-ok{color:#166534}
+.usermod-menu{padding:6px}
+.usermod-menu-item{display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:inherit;font:13px system-ui,-apple-system,"Segoe UI",sans-serif;text-align:left;cursor:pointer}
+.usermod-menu-item:hover:not(:disabled){background:rgba(15,118,110,.1)}
+.usermod-menu-item:disabled{opacity:.45;cursor:default}
+.usermod-menu-item .usermod-menu-icon{display:flex;flex:none;width:18px;height:18px;color:#0f766e}
+.usermod-menu-item .usermod-menu-icon svg{width:18px;height:18px}
+.usermod-menu-item .usermod-menu-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.usermod-menu-item small{color:#888;flex:none}
+.usermod-menu-heading{margin:8px 8px 2px;font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.05em}
+.usermod-menu-heading:first-child{margin-top:2px}
+html[data-theme=dark] .usermod-menu-item:hover:not(:disabled){background:rgba(255,255,255,.08)}
+html[data-theme=dark] .usermod-menu-item .usermod-menu-icon{color:#4ade80}
+html[data-theme=dark] .usermod-menu-heading,html[data-theme=dark] .usermod-menu-item small{color:#999}
 html[data-theme=dark] .usermod-popover{background:#262626;color:#eee}
 html[data-theme=dark] .usermod-sub,html[data-theme=dark] .usermod-popover .usermod-sub,html[data-theme=dark] .usermod-section>h4,html[data-theme=dark] .usermod-list small,html[data-theme=dark] .usermod-kv dt,html[data-theme=dark] .usermod-field small{color:#aaa}
 html[data-theme=dark] .usermod-field>span.usermod-label{color:#ddd}

@@ -1,0 +1,24 @@
+{
+  "name": "@neststudio-mods/final-geometry",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Runs the material simulation to the end and compares the machined stock with the original model: rest material, overcuts, volumes, STL export",
+  "usermod": {
+    "name": "final-geometry",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 49,
+    "description": "Runs the material simulation to the end and compares the machined stock with the original model: rest material, overcuts, volumes, STL export"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

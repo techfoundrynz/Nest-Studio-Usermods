@@ -6,7 +6,8 @@ workspace. It adds:
 
 - **Post-processors**: typed transforms applied to every G-code file the app exports (and, optionally,
   to G-code sent to the machine).
-- **UI mods**: scripts injected into the app's renderer, with a **MODS** button in the app bar.
+- **UI mods**: scripts injected into the app's renderer. Each one owns an icon in the app bar next to the
+  Settings gear; the bar keeps five and collapses the rest into an ellipsis menu.
 - **Main mods**: main-process extensions with full Node access, exposed to UI mods over IPC.
 - **Update-proof install**: an interactive installer rebuilds `app.asar` and can be re-run after every
   app update.
@@ -44,6 +45,11 @@ applies marker-based patches, verifies the patched main script still parses, rep
 `build\app.asar`, backs up the original as `resources\app.asar.orig`, and copies the patched archive
 into place. Nest Studio must be closed for the copy.
 
+**The toolbar.** Every enabled mod with UI adds one icon after the Settings gear. Five stay in the bar and
+the rest collapse into an ellipsis (…) menu; raise the limit or pin the mods you want kept visible under
+MODS ▸ Toolbar. Mods whose click is a direct action (dark mode, isometric view) put their settings on a
+right-click, and app-tools opens a small menu.
+
 **Choosing mods.** Everything except the MODS menu itself is off after install. Open the MODS menu in
 the app and click **Mods…** to switch mods on. Save does whatever the toggled mods need: post-processors
 apply at once, a UI mod change reloads the UI automatically, and switching a main-process mod off offers
@@ -62,11 +68,21 @@ Non-interactive equivalents:
 | --- | --- |
 | `pnpm run install:app -- --install` | install, or re-install after an app update (no-op if current) |
 | `pnpm run install:app -- --install --force` | rebuild even if current |
-| `pnpm run install:app -- --install --devtools` | build option: re-enable Chromium DevTools (the app ships with them off); `F12` or MODS ▸ Developer toggles them |
+| `pnpm run install:app -- --install --devtools` | build option: re-enable Chromium DevTools (the app ships with them off); `F12` (app-tools) or MODS ▸ Developer toggles them |
 | `pnpm run install:app -- --install --cam-docs` | build option: start the CAM service with `ENABLE_DOCS=1` so Swagger is at `127.0.0.1:9630/docs` |
+| `pnpm run install:app -- --install --multi-side` | build option: more than two machining sides. Keeps the Flip Setup "+" after the second side and tiles extra flip platforms; generation, preview face switching, per-face export and the machining queue already handle any number |
 
 Build options are baked into the patched archive. The interactive install asks for them; `--no-devtools` /
-`--no-cam-docs` turn them off again. The MODS panel shows which ones the installed build carries.
+`--no-cam-docs` / `--no-multi-side` turn them off again. The MODS panel shows which ones the installed build
+carries.
+
+**More than two sides.** With `--multi-side` the Flip Setup panel keeps its "+" button, so a project can have
+any number of machining sides (each a 180° flip about X or Y of the previous stock orientation). Everything
+downstream already handles N sides: per-side toolpath generation, the Preview face switcher, one exported
+program per side, and the machine's job queue that asks you to flip and continue after each face. Two things
+stay two-sided in the app itself: the CAM service pairs support-tab data between "the" top face and each
+bottom face, and the material simulation always starts a face from fresh stock (the final-geometry mod
+compares one face at a time for the same reason).
 | `pnpm run build:asar` | build `build\app.asar` without touching the install (no admin) |
 | `pnpm run mods` | CLI fallback for enabling/disabling mods (writes `mods.json`) |
 | `pnpm run uninstall:app` | restore `app.asar.orig` |
@@ -87,12 +103,13 @@ packages/
   ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms; imperative DOM helpers
                                                plus bundled React 19 with matching components and hooks (usermodUI.react) for TSX mods
 mods/
-  feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
-  strip-comments, line-numbers                                                              (post-processors)
-  mods-menu, dark-mode, gcode-lab, dev-shortcuts, iso-view, status-hud, device-macros,
-  tool-change-assistant, keyboard-jog                                                       (UI)
+  feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, peck-drill,
+  gcode-format, tool-split, export-copy                                                     (post-processors)
+  mods-menu, dark-mode, gcode-lab, iso-view, status-hud, device-macros, tool-change-assistant,
+  jog, cycles, feeds-speeds, live-override, z-probe, work-offsets, toolpath-color, tool-visual,
+  tool-library                                                                              (UI)
   machine-state, camera-timelapse, project-backup, export-filename                          (main)
-  app-tools, job-notifier, ui-scale, export-report                                          (main/post + UI)
+  app-tools, jobs, ui-scale, export-report, lan-monitor, final-geometry, toolpath-modifiers (main/post + UI)
 mods.default.json   tracked template: enabled list (empty) + default settings
 mods.json           per-machine copy (git-ignored), created from the template on first run, edited by Mods… / settings forms
 docs/          launch-options.md, architecture.md, mod-api.md
@@ -121,29 +138,39 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `arc-fit` | post | Runs the bundled ArcWelder on every export: G1 segment chains become G2/G3 arcs (much smaller reliefs) |
 | `tool-change-guard` | post | Before each tool change: M5/M9 if running, machine-coordinate retract, optional M0 pause for manual bit swaps |
 | `export-copy` | post | Also writes each export to a folder (USB stick, network share) once `targetDir` is set |
-| `job-notifier` | main + ui | Windows toast (and optional webhook) when a machine job finishes, alarms or pauses; status panel in the MODS menu |
-| `export-report` | post + ui | JSON stats report per export (bounds, tools, feeds) in `data/reports`; "Last export report…" in the menu |
+| `jobs` | main + ui | Desktop toast / webhook when a run finishes, alarms or pauses; run history (program, tools, duration, outcome) with totals and CSV export |
+| `export-report` | post + ui | JSON stats report per export (bounds, tools, feeds) plus depth, low-rapid and envelope checks; "Last export report…" in the menu, a warning dialog when a check fails |
+| `jog` | ui | Keyboard (arrows / PgUp / PgDn, Escape stops) and game-controller jogging over one guarded jog engine |
+| `gcode-format` | post | Strip comments / blank lines and add `N` line numbers, each switchable in its settings (both off by default) |
 | `iso-view` | ui | Toolbar toggle between perspective and an isometric-style view of the 3D scene; right-click for Top/Front/Right/Iso/Reset |
 | `tool-visual` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper/V, drill); the app uses one fixed bit |
-| `machine-state` | main | Shared machine status / progress / ETA (`machine:state`) for other mods; optional console log to `data/console` |
+| `cycles` | ui | Cycle generators: thread milling (internal/external, RH/LH), helical hole milling, spoilboard surfacing; validate, preview, export via the chain |
+| `peck-drill` | post | Deep straight plunges become peck cycles with chip-clearing retracts |
+| `tool-split` | post | One extra file per tool section next to every multi-tool export, each with preamble and safe footer |
+| `live-override` | ui | Feed / spindle / rapid override buttons (GRBL realtime commands) with the live FS readout |
+| `z-probe` | ui | Touch-plate Z zero wizard (G38.2, two-stage) that sets the work Z; offered in the tool-change dialog |
+| `work-offsets` | ui | G54–G59 switching, set zero here, named machine positions with go-to and zero-at |
+| `lan-monitor` | main + ui | Read-only status page on the LAN with progress, ETA and the latest camera frame |
+| `feeds-speeds` | ui | Chip-load calculator per material against the tool library, with favourites |
+| `toolpath-modifiers` | main + ui | Runs chosen post-processors on each toolpath as the CAM generates it, so the Preview tab, the saved project and the export carry the result (export/send skip what was already applied) |
+| `tool-library` | ui | Export selected tools to JSON and import from JSON or another store.json, resolving id and slot clashes |
+| `final-geometry` | main + ui | Runs the material simulation to the end and compares the machined stock with the model: rest material, overcuts, volumes, ghost overlay, STL export of the machined stock |
+| `toolpath-color` | ui | Preview toolpaths coloured by depth or per operation; hover a list row to highlight its path |
+| `machine-state` | main | Shared machine status, positions (MPos/WPos), WCS, feed/spindle, progress / ETA (`machine:state`) for other mods; optional console log |
 | `status-hud` | ui | Always-visible status pill with progress bar and ETA; click for details |
 | `device-macros` | ui | Toolbar button with user-defined G-code / command macros (with confirmation) |
 | `tool-change-assistant` | ui | When the machine holds at a tool change, names the tool from the library and offers Resume |
 | `camera-timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
 | `project-backup` | main | Timestamped copies of every saved project zip in `data/backups`, newest N kept |
 | `export-filename` | main | Pre-fills the export dialog from a template (`{name} {project} {date} {time}`) and default folder |
-| `keyboard-jog` | ui | Hold arrows / PgUp / PgDn on the Device tab to jog (GRBL `$J`), release to stop |
-| `strip-comments` | post (off) | Removes comments and blank lines, keeping the app header |
-| `line-numbers` | post (off) | Adds `N` line numbers |
 | `mods-menu` | ui | App-bar button and panel: status, mod actions, reload post-processors / UI |
 | `dark-mode` | ui | Sun/moon toolbar button that switches Nest Studio's built-in dark theme; optional follow-OS setting |
 | `ui-scale` | ui + main | UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, remembered) and a compact density mode that tightens the app's spacing tokens |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via chain |
-| `app-tools` | ui + main | Open app logs / user data / usermod.log, CAM service status, open API docs |
-| `dev-shortcuts` | ui | `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log, `F12` DevTools |
+| `app-tools` | ui + main | Open app logs / user data / usermod.log, CAM service status, API docs; `Ctrl+Shift+M` panel, `Ctrl+Shift+R` reload UI, `Ctrl+Shift+L` open log, `F12` DevTools |
 
 All of these start switched off; enable them from MODS ▸ Mods…. Settings changes apply after "Reload
-post-processors" in the MODS panel; UI mods after a UI reload (`Ctrl+Shift+R`), main mods at app start.
+post-processors" in the MODS panel; UI mods after a UI reload (`Ctrl+Shift+R` with app-tools on), main mods at app start.
 
 ## Development
 
@@ -152,6 +179,10 @@ pnpm run build      # tsc for every package and mod
 pnpm run watch      # loader + all mods in watch mode (concurrently)
 pnpm test           # build, then run the loader harness under a stubbed Electron
 ```
+
+Third-party versions are pinned once in the `catalog:` section of `pnpm-workspace.yaml`; packages declare
+`"catalog:"` instead of a version (`catalogMode: strict` makes `pnpm add` refuse anything else). Bump a version
+there and run `pnpm install`.
 
 Writing a mod: copy one of the `mods/*` packages, edit `src/index.ts` against the `Usermod.*` types,
 add the `usermod` manifest, run `pnpm install` (links the types package) and `pnpm run build`. UI mods

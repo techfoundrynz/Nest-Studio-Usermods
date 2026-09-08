@@ -47,7 +47,7 @@ ENABLE_DOCS=1 '/Applications/Nest Studio.app/Contents/MacOS/Nest Studio'
 | --- | --- | --- |
 | `neststudio://open?params=<url-encoded JSON>` | Deep link. Route must be `open`; `params` must be a JSON object with a `fileUrl` on an allow-listed host (community model hosts) or a `/NestStudioModel/` path. Also registered as a protocol handler, so a second instance forwards it to the running app and exits silently. | verified (parsing read; forwarding exercised) |
 | `--inspect=9229`, `--inspect-brk` | Node inspector for the **main** process (fuse `EnableNodeCliInspectArguments` enabled). Attach with `chrome://inspect`. | inferred from fuses |
-| `--remote-debugging-port`, `--remote-debugging-pipe` | Removed by the app at startup (`installDevToolsPolicy`), DevTools are force-closed when opened, and Ctrl+Shift+I is swallowed. The installer's `--devtools` flag patches `OPEN_DEV_TOOLS` and the close hook; then `F12` (dev-shortcuts mod) or MODS ▸ Developer ▸ Toggle DevTools opens them. | verified in code |
+| `--remote-debugging-port`, `--remote-debugging-pipe` | Removed by the app at startup (`installDevToolsPolicy`), DevTools are force-closed when opened, and Ctrl+Shift+I is swallowed. The installer's `--devtools` flag patches `OPEN_DEV_TOOLS` and the close hook; then `F12` (app-tools mod) or MODS ▸ Developer ▸ Toggle DevTools opens them. | verified in code |
 | `--js-flags=--max-old-space-size=8192`, `--enable-gpu-rasterization`, `--ignore-gpu-blocklist` | Appended by the app itself; shown so you know the baseline. Other Chromium switches you pass on the command line are honoured by Electron as usual. | verified in code |
 
 ## Ports

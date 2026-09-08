@@ -4,7 +4,9 @@
  * classic scripts with `module: none`, can see them too.
  */
 declare namespace Usermod {
-  type Stage = "export" | "send";
+  /** "export": file written by the app; "send": G-code sent to the machine; "preview": CAM result intercepted when
+   *  toolpaths are generated (toolpath-modifiers mod), so the change shows in the Preview tab and is saved with the project. */
+  type Stage = "export" | "send" | "preview";
   type LogLevel = "info" | "warn" | "error";
 
   /** Every usermod IPC call resolves to this shape; thrown errors never reach the renderer. */
@@ -79,6 +81,8 @@ declare namespace Usermod {
     fileName?: string;
     filePath?: string;
     channel?: string;
+    /** Preview stage: the CAM service endpoint that produced the toolpath (e.g. "/api/pocketPath"). */
+    endpoint?: string;
   }
 
   /** window.usermod: the preload bridge to the main-process loader. */
@@ -133,6 +137,10 @@ declare namespace Usermod {
     close(): void;
     refresh(): Promise<void>;
   }
+  /**
+   * Legacy surface: bundled mods each own a toolbar button instead. Actions registered here are listed in the
+   * toolbar's overflow (ellipsis) menu under their section heading, so older mods keep working.
+   */
   interface MenuAction {
     id: string;
     label: string;
@@ -140,6 +148,7 @@ declare namespace Usermod {
     section?: string;
     order?: number;
     title?: string;
+    icon?: IconSource;
   }
   interface RegisteredMenuAction extends MenuAction {
     section: string;
@@ -166,6 +175,8 @@ declare namespace Usermod {
       addAction(action: MenuAction): void;
       removeAction(id: string): void;
       actions(): RegisteredMenuAction[];
+      /** Fires when actions are added or removed (the UI kit re-renders the overflow menu). */
+      onChange(callback: () => void): () => void;
     };
     waitFor<E extends Element = HTMLElement>(selector: string, options?: { timeout?: number; root?: ParentNode }): Promise<E>;
     observe(callback: (mutations: MutationRecord[]) => void, root?: Node): () => void;
@@ -189,9 +200,33 @@ declare namespace Usermod {
     title: string;
     icon: IconSource;
     onClick(button: HTMLButtonElement): void | Promise<void>;
-    /** Left-to-right order among usermod toolbar buttons (default 100). */
+    /** Left-to-right order among usermod toolbar buttons (default 100); also decides what overflows. */
     order?: number;
     ariaLabel?: string;
+    /** Right-click / long-press action, usually the mod's settings. Mention it in `title` so it is discoverable. */
+    onContextMenu?(button: HTMLButtonElement): void | Promise<void>;
+    /** Keep this button out of the overflow menu (mods-menu pins itself). */
+    pinned?: boolean;
+  }
+  /** A row in a kit menu (toolbar overflow, or ui.menu for a mod with several actions). */
+  interface MenuItem {
+    label: string;
+    onClick(): void | Promise<void>;
+    icon?: IconSource;
+    title?: string;
+    /** Muted text after the label (a shortcut, a current value). */
+    hint?: string;
+    disabled?: boolean;
+  }
+  /** A heading / divider between groups of rows. */
+  interface MenuHeading {
+    heading: string;
+  }
+  type MenuEntry = MenuItem | MenuHeading;
+  interface MenuOptions {
+    width?: number;
+    align?: "left" | "right";
+    onClose?(): void;
   }
   interface ToolbarButtonHandle {
     readonly id: string;
@@ -252,8 +287,18 @@ declare namespace Usermod {
       addButton(options: ToolbarButtonOptions): ToolbarButtonHandle;
       removeButton(id: string): void;
       buttons(): string[];
+      /** Icons shown in the app bar before the rest collapse into the ellipsis menu (default 5, minimum 2). */
+      setMaxVisible(count: number): void;
+      maxVisible(): number;
+      /** Button ids that keep an app-bar slot whatever their order (the user's choice, from mods-menu settings). */
+      setPinned(ids: string[]): void;
+      pinned(): string[];
+      /** Every registered button, in bar order, with whether it is currently visible or in the overflow menu. */
+      entries(): { id: string; title: string; visible: boolean; pinned: boolean }[];
     };
     popover(anchor: HTMLElement, options?: PopoverOptions): PopoverHandle;
+    /** Popover of clickable rows under `anchor`; the toolbar's overflow menu is one of these. */
+    menu(anchor: HTMLElement, items: MenuEntry[], options?: MenuOptions): PopoverHandle;
     closePopovers(): void;
     modal(title: string, options?: ModalOptions): ModalHandle;
     button(label: string, onClick: (event: MouseEvent) => void | Promise<void>, options?: ButtonOptions): HTMLButtonElement;
@@ -272,6 +317,7 @@ declare namespace Usermod {
       moon(): SVGSVGElement;
       sun(): SVGSVGElement;
       gear(): SVGSVGElement;
+      ellipsis(): SVGSVGElement;
     };
   }
 }
@@ -400,6 +446,12 @@ declare namespace Usermod {
     startedAt: number | null;
     toolChanges: MachineToolChange[];
   }
+  interface MachineAxes {
+    x: number;
+    y: number;
+    z: number;
+    a: number;
+  }
   interface MachineState {
     connected: boolean;
     status: string | null;
@@ -411,5 +463,24 @@ declare namespace Usermod {
     progress: number | null;
     etaSeconds: number | null;
     updatedAt: number;
+    /** Machine coordinates from the status frame (MPos), when the firmware reports them. */
+    mpos: MachineAxes | null;
+    /** Work coordinates (WPos). */
+    wpos: MachineAxes | null;
+    /** Active work coordinate system as the firmware reports it (54..59), null when unknown. */
+    wcs: number | null;
+    /** Current feed / spindle from the FS field. */
+    feed: number | null;
+    spindle: number | null;
+    /** Tool slot reported by the firmware (T field), as text. */
+    tool: string | null;
+    /** Last error / alarm console line seen, with its time. */
+    lastError: { line: string; time: number } | null;
+  }
+  /** Payload of the machine-state mod's "machine:console" channel: error / alarm / probe result lines only. */
+  interface MachineConsoleLine {
+    line: string;
+    time: number;
+    kind: "error" | "alarm" | "probe" | "info";
   }
 }

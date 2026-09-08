@@ -3,13 +3,13 @@
   "version": "0.3.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Writes a stats report for every export (bounds, tools, feeds) and shows the last one",
+  "description": "Stats report for every export plus depth, low-rapid and envelope checks; shows the last one",
   "usermod": {
     "name": "export-report",
     "postprocessor": "dist/post.js",
     "ui": "dist/ui.js",
     "order": 950,
-    "description": "Writes a stats report for every export (bounds, tools, feeds) and shows the last one"
+    "description": "Stats report for every export plus depth, low-rapid and envelope checks; shows the last one"
   },
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@neststudio-usermods/types": "workspace:*",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.7"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
   }
 }

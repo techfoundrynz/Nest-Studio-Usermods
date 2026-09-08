@@ -36,6 +36,7 @@ export const icons: Usermod.UI["icons"] = {
   puzzle: () => svg("M10.5 2.5a2.5 2.5 0 0 1 2.5 2.5v.5h2.5A2 2 0 0 1 17.5 7.5V10h.5a2.5 2.5 0 1 1 0 5h-.5v3.5a2 2 0 0 1-2 2H13v-.5a2.5 2.5 0 1 0-5 0v.5H4.5a2 2 0 0 1-2-2V15H3a2.5 2.5 0 1 0 0-5h-.5V7.5a2 2 0 0 1 2-2H8V5a2.5 2.5 0 0 1 2.5-2.5z"),
   moon: () => svg("M13.2 2.6a9.5 9.5 0 1 0 8.2 12.8 8 8 0 0 1-8.2-12.8z"),
   sun: () => svg("M12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0-5.5a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zm0 18a1 1 0 0 1 1 1v2a1 1 0 1 1-2 0v-2a1 1 0 0 1 1-1zM1.5 12a1 1 0 0 1 1-1h2a1 1 0 1 1 0 2h-2a1 1 0 0 1-1-1zm18 0a1 1 0 0 1 1-1h2a1 1 0 1 1 0 2h-2a1 1 0 0 1-1-1zM4.6 4.6a1 1 0 0 1 1.4 0l1.4 1.4a1 1 0 1 1-1.4 1.4L4.6 6a1 1 0 0 1 0-1.4zm12 12a1 1 0 0 1 1.4 0l1.4 1.4a1 1 0 1 1-1.4 1.4L16.6 18a1 1 0 0 1 0-1.4zM19.4 4.6a1 1 0 0 1 0 1.4L18 7.4A1 1 0 1 1 16.6 6L18 4.6a1 1 0 0 1 1.4 0zm-12 12a1 1 0 0 1 0 1.4L6 19.4A1 1 0 1 1 4.6 18L6 16.6a1 1 0 0 1 1.4 0z"),
+  ellipsis: () => svg("M6 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"),
   gear: () => svg("M10.3 2.5h3.4l.5 2.3a7.6 7.6 0 0 1 1.9 1.1l2.2-.8 1.7 3-1.8 1.5a7.7 7.7 0 0 1 0 2.2l1.8 1.5-1.7 3-2.2-.8a7.6 7.6 0 0 1-1.9 1.1l-.5 2.4h-3.4l-.5-2.4a7.6 7.6 0 0 1-1.9-1.1l-2.2.8-1.7-3 1.8-1.5a7.7 7.7 0 0 1 0-2.2L4 8.1l1.7-3 2.2.8a7.6 7.6 0 0 1 1.9-1.1l.5-2.3zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z")
 };
 function iconNode(icon: Usermod.IconSource): Node {
@@ -44,15 +45,51 @@ function iconNode(icon: Usermod.IconSource): Node {
   return icon;
 }
 
+/* ------------------------------------------------------------------- menu */
+const isHeading = (entry: Usermod.MenuEntry): entry is Usermod.MenuHeading => "heading" in entry;
+/** Popover of clickable rows. Rows close the menu before running, so an action may open its own popover. */
+export function menu(anchor: HTMLElement, items: Usermod.MenuEntry[], { width = 260, align = "right", onClose }: Usermod.MenuOptions = {}): Usermod.PopoverHandle {
+  const handle = popover(anchor, { width, align, className: "usermod-menu", onClose });
+  const rows = items.map((item) => {
+    if (isHeading(item)) return el("div", { class: "usermod-menu-heading", text: item.heading });
+    const row = el("button", {
+      type: "button",
+      class: "usermod-menu-item",
+      title: item.title,
+      onClick: () => {
+        handle.close();
+        Promise.resolve(item.onClick()).catch((error: unknown) => rt.toast(`${item.label}: ${message(error)}`, { kind: "error" }));
+      }
+    });
+    row.disabled = item.disabled === true;
+    if (item.icon) row.appendChild(el("span", { class: "usermod-menu-icon" }, [iconNode(item.icon)]));
+    row.appendChild(el("span", { class: "usermod-menu-label", text: item.label }));
+    if (item.hint) row.appendChild(el("small", { text: item.hint }));
+    return row;
+  });
+  handle.body.replaceChildren(...rows);
+  handle.reposition();
+  return handle;
+}
+
 /* ---------------------------------------------------------------- toolbar */
 interface ToolbarEntry {
   options: Usermod.ToolbarButtonOptions;
   order: number;
   badge: boolean;
+  /** The app-bar button, or null while this entry sits in the overflow menu. */
   button: HTMLButtonElement | null;
 }
 const toolbarEntries = new Map<string, ToolbarEntry>();
+/** Usermod icons in the app bar, ellipsis included, before the rest collapse into it. */
+let maxVisible = 5;
+let pinnedIds = new Set<string>();
+let overflowButton: HTMLButtonElement | null = null;
+const isPinned = (entry: ToolbarEntry): boolean => entry.options.pinned === true || pinnedIds.has(entry.options.id);
 
+function runButton(entry: ToolbarEntry, element: HTMLButtonElement): void {
+  Promise.resolve(entry.options.onClick(element)).catch((error: unknown) => rt.toast(`${entry.options.title}: ${message(error)}`, { kind: "error" }));
+}
 function buildButton(entry: ToolbarEntry, className: string): HTMLButtonElement {
   const button = el("button", {
     type: "button",
@@ -62,14 +99,70 @@ function buildButton(entry: ToolbarEntry, className: string): HTMLButtonElement 
     "aria-label": entry.options.ariaLabel ?? entry.options.title,
     "data-usermod-button": entry.options.id,
     "data-badge": entry.badge ? "true" : "false",
-    onClick: () => {
-      Promise.resolve(entry.options.onClick(button)).catch((error: unknown) => rt.toast(`${entry.options.title}: ${message(error)}`, { kind: "error" }));
+    onClick: () => runButton(entry, button),
+    onContextmenu: (event: MouseEvent) => {
+      if (!entry.options.onContextMenu) return;
+      event.preventDefault();
+      Promise.resolve(entry.options.onContextMenu(button)).catch((error: unknown) => rt.toast(`${entry.options.title}: ${message(error)}`, { kind: "error" }));
     }
   });
   button.appendChild(iconNode(entry.options.icon));
   entry.button = button;
   return button;
 }
+/** The ellipsis button: one element reused across mounts so the app bar is not rebuilt on every change. */
+function buildOverflowButton(className: string, hidden: ToolbarEntry[]): HTMLButtonElement {
+  const button =
+    overflowButton ??
+    el("button", {
+      type: "button",
+      id: "usermod-tb-overflow",
+      class: `${className} usermod-tb-btn`,
+      title: "More mods",
+      "aria-label": "More mods",
+      "data-usermod-button": "overflow",
+      onClick: () => openOverflowMenu()
+    });
+  if (!overflowButton) button.appendChild(icons.ellipsis());
+  overflowButton = button;
+  button.setAttribute("data-badge", hidden.some((e) => e.badge) ? "true" : "false");
+  const count = hidden.length + rt.menu.actions().length;
+  button.title = count ? `More mods (${count})` : "More mods";
+  return button;
+}
+function openOverflowMenu(): void {
+  const anchor = overflowButton;
+  if (!anchor) return;
+  const items: Usermod.MenuEntry[] = [];
+  const hidden = orderedEntries().filter((entry) => entry.button === null);
+  for (const entry of hidden) {
+    items.push({
+      label: entry.options.title,
+      icon: entry.options.icon,
+      title: entry.options.title,
+      onClick: () => runButton(entry, anchor)
+    });
+  }
+  // Legacy rt.menu.addAction entries, grouped by section, so older mods still have a home.
+  const sections = new Map<string, Usermod.RegisteredMenuAction[]>();
+  for (const action of rt.menu.actions()) sections.set(action.section, [...(sections.get(action.section) ?? []), action]);
+  for (const [section, actions] of sections) {
+    items.push({ heading: section });
+    for (const action of actions) {
+      items.push({
+        label: action.label,
+        icon: action.icon,
+        title: action.title,
+        onClick: () => action.onClick({ close: closePopovers, refresh: () => Promise.resolve() })
+      });
+    }
+  }
+  if (!items.length) items.push({ label: "No other mod UI", onClick: () => undefined, disabled: true });
+  menu(anchor, items, { width: 280 });
+}
+const orderedEntries = (): ToolbarEntry[] =>
+  [...toolbarEntries.values()].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || a.order - b.order || a.options.id.localeCompare(b.options.id));
+
 function mountToolbar(): void {
   const settings = document.querySelector<HTMLButtonElement>(SETTINGS_SELECTOR);
   if (!settings) return;
@@ -78,8 +171,21 @@ function mountToolbar(): void {
     container = el("span", { id: TOOLBAR_ID });
     settings.insertAdjacentElement("afterend", container);
   }
-  const ordered = [...toolbarEntries.values()].sort((a, b) => a.order - b.order || a.options.id.localeCompare(b.options.id));
-  const wanted = ordered.map((entry) => (entry.button?.isConnected && entry.button.parentElement === container ? entry.button : buildButton(entry, settings.className)));
+  const ordered = orderedEntries();
+  const legacyActions = rt.menu.actions().length;
+  const limit = Math.max(2, maxVisible);
+  // The ellipsis takes the last slot when anything has to collapse into it.
+  const needsOverflow = ordered.length > limit || (ordered.length === limit && legacyActions > 0);
+  const visibleCount = needsOverflow ? limit - 1 : ordered.length;
+  const wanted: HTMLElement[] = [];
+  for (const [index, entry] of ordered.entries()) {
+    if (index < visibleCount) {
+      wanted.push(entry.button?.isConnected && entry.button.parentElement === container ? entry.button : buildButton(entry, settings.className));
+      continue;
+    }
+    entry.button = null; // lives in the overflow menu now
+  }
+  if (needsOverflow || legacyActions > 0) wanted.push(buildOverflowButton(settings.className, ordered.slice(visibleCount)));
   // Only touch the DOM when the button sequence differs.
   const current = Array.from(container.children);
   if (current.length !== wanted.length || current.some((node, i) => node !== wanted[i])) container.replaceChildren(...wanted);
@@ -92,6 +198,8 @@ function ensureToolbarObserver(): void {
   rt.observe(() => {
     if (!document.getElementById(TOOLBAR_ID) && document.querySelector(SETTINGS_SELECTOR)) mountToolbar();
   });
+  // Menu actions may be registered after the toolbar first mounts.
+  rt.menu.onChange(() => mountToolbar());
 }
 export const toolbar: Usermod.UI["toolbar"] = {
   addButton(options) {
@@ -102,7 +210,8 @@ export const toolbar: Usermod.UI["toolbar"] = {
     mountToolbar();
     return {
       id: options.id,
-      element: () => entry.button,
+      /** The app-bar button, or the ellipsis button while this mod sits in the overflow menu. */
+      element: () => entry.button ?? overflowButton,
       setIcon(icon) {
         entry.options.icon = icon;
         entry.button?.replaceChildren(iconNode(icon));
@@ -117,6 +226,7 @@ export const toolbar: Usermod.UI["toolbar"] = {
       setBadge(on) {
         entry.badge = on;
         entry.button?.setAttribute("data-badge", on ? "true" : "false");
+        if (!entry.button && overflowButton) overflowButton.setAttribute("data-badge", orderedEntries().some((e) => e.button === null && e.badge) ? "true" : "false");
       },
       remove() {
         toolbar.removeButton(options.id);
@@ -126,9 +236,29 @@ export const toolbar: Usermod.UI["toolbar"] = {
   removeButton(id) {
     toolbarEntries.get(id)?.button?.remove();
     toolbarEntries.delete(id);
+    mountToolbar();
   },
   buttons() {
     return [...toolbarEntries.keys()];
+  },
+  setMaxVisible(count) {
+    const next = Math.max(2, Math.floor(count) || 5);
+    if (next === maxVisible) return;
+    maxVisible = next;
+    mountToolbar();
+  },
+  maxVisible() {
+    return maxVisible;
+  },
+  setPinned(ids) {
+    pinnedIds = new Set(ids.filter((id) => typeof id === "string"));
+    mountToolbar();
+  },
+  pinned() {
+    return [...pinnedIds];
+  },
+  entries() {
+    return orderedEntries().map((entry) => ({ id: entry.options.id, title: entry.options.title, visible: entry.button !== null, pinned: isPinned(entry) }));
   }
 };
 
@@ -259,6 +389,7 @@ export function settingsForm(modName: string, { title, fields, reloadPostprocess
 export const imperative: Omit<Usermod.UI, "version" | "react"> = {
   toolbar,
   popover,
+  menu,
   closePopovers,
   modal: (t, o) => rt.modal(t, o),
   button,

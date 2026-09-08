@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/jog",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Jog the machine from the keyboard (arrows / PgUp / PgDn) or a game controller, with one shared jog engine, guards and stop",
+  "usermod": {
+    "name": "jog",
+    "ui": "dist/index.js",
+    "order": 46,
+    "description": "Jog the machine from the keyboard (arrows / PgUp / PgDn) or a game controller, with one shared jog engine, guards and stop"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

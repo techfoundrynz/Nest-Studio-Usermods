@@ -179,9 +179,4 @@
   };
   attachContextMenu();
   rt.observe(attachContextMenu);
-  rt.menu.addAction({ id: "iso-view-presets", label: "3D view presets…", section: "Appearance", order: 30, onClick: ({ close }) => {
-    close();
-    const el = handle.element();
-    if (el) presets(el);
-  } });
 })();

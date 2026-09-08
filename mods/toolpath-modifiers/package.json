@@ -1,0 +1,24 @@
+{
+  "name": "@neststudio-mods/toolpath-modifiers",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Runs chosen post-processors when toolpaths are generated, so the change shows in the Preview tab and is saved with the project",
+  "usermod": {
+    "name": "toolpath-modifiers",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 34,
+    "description": "Runs chosen post-processors when toolpaths are generated, so the change shows in the Preview tab and is saved with the project"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/cycles",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Cycle generators: thread milling, helical hole milling and spoilboard surfacing programs, validated and exported through the post-processor chain",
+  "usermod": {
+    "name": "cycles",
+    "ui": "dist/index.js",
+    "order": 35,
+    "description": "Cycle generators: thread milling, helical hole milling and spoilboard surfacing programs, validated and exported through the post-processor chain"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

@@ -13,6 +13,7 @@
  *   build options (baked into the patched archive; asked interactively when not given):
  *          --devtools / --no-devtools   re-enable Chromium DevTools in the app (F12 toggles them)
  *          --cam-docs / --no-cam-docs   start the CAM service with ENABLE_DOCS=1 (Swagger at 127.0.0.1:9630/docs)
+ *          --multi-side / --no-multi-side   allow more than two machining sides (Flip Setup "+" stays available)
  *
  * Nest Studio's Electron build only loads code from app.asar (resources\ on Windows, Contents/Resources
  * inside the .app on macOS), so the loader is injected by rebuilding that archive: extract -> patch ->
@@ -49,10 +50,15 @@ interface BuildOption {
   cli: string;
   label: string;
   description: string;
-  /** Idempotent text transforms on out/main/index.js; apply() must leave a marker so revert() can undo it. */
+  /** Idempotent text transforms; apply() must leave a marker so revert() can undo it. */
   apply(source: string): string;
   revert(source: string): string;
   marker: string;
+  /** "main" (default): out/main/index.js. "renderer": every out/renderer/assets file matching `assets`. */
+  target?: "renderer";
+  assets?: RegExp;
+  /** Renderer options patch several sites; all of them must carry the marker for the option to count as applied. */
+  expectedMarkers?: number;
 }
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 const BUILD_OPTIONS: BuildOption[] = [
@@ -60,7 +66,7 @@ const BUILD_OPTIONS: BuildOption[] = [
     id: "devtools",
     cli: "devtools",
     label: "Chromium DevTools",
-    description: "The app ships OPEN_DEV_TOOLS=false and closes DevTools as soon as they open. F12 (dev-shortcuts) toggles them.",
+    description: "The app ships OPEN_DEV_TOOLS=false and closes DevTools as soon as they open. F12 (app-tools) toggles them.",
     marker: "/* NEST-USERMOD-DEVTOOLS */",
     // Both replacements must stay valid JavaScript: notes live INSIDE the comment.
     apply: (s) =>
@@ -80,8 +86,53 @@ const BUILD_OPTIONS: BuildOption[] = [
     marker: "/* NEST-USERMOD-CAMDOCS */",
     apply: (s) => s.replace("env: { ...process.env },", 'env: { ...process.env, ENABLE_DOCS: "1" }, /* NEST-USERMOD-CAMDOCS */'),
     revert: (s) => s.replace('env: { ...process.env, ENABLE_DOCS: "1" }, /* NEST-USERMOD-CAMDOCS */', "env: { ...process.env },")
+  },
+  {
+    /*
+     * The project model (saveCoordsSystemList), toolpath generation, preview face switcher and the machining
+     * queue all handle any number of sides already; the app only hides the Flip Setup "+" button once a second
+     * side exists and lays flip platforms out for exactly one RX and one RY position. These edits lift the
+     * button cap, tile extra platforms of the same direction further out, keep the direction badge for the
+     * last side, and make the generation order stable when several sides share a rank.
+     */
+    id: "multiSide",
+    cli: "multi-side",
+    label: "More than two machining sides",
+    description: "Keeps the Flip Setup \"+\" button after the second side and tiles extra flip platforms so any number of sides can be set up, generated, previewed and machined in sequence.",
+    marker: "/* NEST-USERMOD-MULTISIDE */",
+    target: "renderer",
+    assets: /^(PreparePageContent|engine-3d|FullApp)-.*\.js$/,
+    expectedMarkers: 9,
+    apply: (s) =>
+      s
+        // Prepare page: the "+" button and the direction badge.
+        .replace('items.length === 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")', 'items.length >= 1 /* NEST-USERMOD-MULTISIDE */ ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")')
+        .replace("coordsList.length !== 2) {", "coordsList.length < 2) { /* NEST-USERMOD-MULTISIDE */")
+        .replace("const direction = coordsList[1]?.flipDirection;", "const direction = coordsList[coordsList.length - 1]?.flipDirection; /* NEST-USERMOD-MULTISIDE */")
+        // 3D engine: flip platforms get a slot per direction so a third side does not land on the second.
+        .replace("function getFlipPlatformOffset(direction, dimensions) {", "function getFlipPlatformOffset(direction, dimensions, slot = 0) { /* NEST-USERMOD-MULTISIDE */")
+        .replace(/(function getFlipPlatformOffset\(direction, dimensions, slot = 0\) \{ \/\* NEST-USERMOD-MULTISIDE \*\/\s*const spacing = resolveFlipPlatformSpacing\(dimensions\))(;)/, "$1 * (slot + 1)$2")
+        .replace("const offset = getFlipPlatformOffset(spec.flipDirection, dimensions);", "const slot = specs.slice(0, specs.indexOf(spec)).filter((other) => other.flipDirection === spec.flipDirection).length; const offset = getFlipPlatformOffset(spec.flipDirection, dimensions, slot); /* NEST-USERMOD-MULTISIDE */")
+        .replace(/flipDirection: spec\.flipDirection,(\s*)platformGroup,/, "flipDirection: spec.flipDirection, slot, /* NEST-USERMOD-MULTISIDE */$1platformGroup,")
+        .replace("const offset = getFlipPlatformOffset(entry.flipDirection, dimensions);", "const offset = getFlipPlatformOffset(entry.flipDirection, dimensions, entry.slot ?? 0); /* NEST-USERMOD-MULTISIDE */")
+        .replace(/getFlipPlatformOffset\(\s*bottomEntry\.flipDirection,\s*stock\.stockDimensions\s*\)/, "getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions, bottomEntry.slot ?? 0) /* NEST-USERMOD-MULTISIDE */")
+        // App: deterministic generation order when several sides share a rank (list order wins).
+        .replace("rankCoordsForGeneration(left) - rankCoordsForGeneration(right));", "rankCoordsForGeneration(left) - rankCoordsForGeneration(right) || list2.indexOf(left) - list2.indexOf(right)); /* NEST-USERMOD-MULTISIDE */"),
+    revert: (s) =>
+      s
+        .replace('items.length >= 1 /* NEST-USERMOD-MULTISIDE */ ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")', 'items.length === 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")')
+        .replace("coordsList.length < 2) { /* NEST-USERMOD-MULTISIDE */", "coordsList.length !== 2) {")
+        .replace("const direction = coordsList[coordsList.length - 1]?.flipDirection; /* NEST-USERMOD-MULTISIDE */", "const direction = coordsList[1]?.flipDirection;")
+        .replace(/(function getFlipPlatformOffset\(direction, dimensions, slot = 0\) \{ \/\* NEST-USERMOD-MULTISIDE \*\/\s*const spacing = resolveFlipPlatformSpacing\(dimensions\)) \* \(slot \+ 1\);/, "$1;")
+        .replace("function getFlipPlatformOffset(direction, dimensions, slot = 0) { /* NEST-USERMOD-MULTISIDE */", "function getFlipPlatformOffset(direction, dimensions) {")
+        .replace("const slot = specs.slice(0, specs.indexOf(spec)).filter((other) => other.flipDirection === spec.flipDirection).length; const offset = getFlipPlatformOffset(spec.flipDirection, dimensions, slot); /* NEST-USERMOD-MULTISIDE */", "const offset = getFlipPlatformOffset(spec.flipDirection, dimensions);")
+        .replace(/flipDirection: spec\.flipDirection, slot, \/\* NEST-USERMOD-MULTISIDE \*\/(\s*)platformGroup,/, "flipDirection: spec.flipDirection,$1platformGroup,")
+        .replace("const offset = getFlipPlatformOffset(entry.flipDirection, dimensions, entry.slot ?? 0); /* NEST-USERMOD-MULTISIDE */", "const offset = getFlipPlatformOffset(entry.flipDirection, dimensions);")
+        .replace("getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions, bottomEntry.slot ?? 0) /* NEST-USERMOD-MULTISIDE */", "getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions)")
+        .replace("rankCoordsForGeneration(left) - rankCoordsForGeneration(right) || list2.indexOf(left) - list2.indexOf(right)); /* NEST-USERMOD-MULTISIDE */", "rankCoordsForGeneration(left) - rankCoordsForGeneration(right));")
   }
 ];
+const countMarkers = (source: string, marker: string): number => source.split(marker).length - 1;
 type Flags = Record<string, boolean>;
 
 interface Options {
@@ -322,6 +373,7 @@ function patchBuildOptions(file: string, flags: Flags): void {
   let source = fs.readFileSync(file, "utf8");
   const original = source;
   for (const o of BUILD_OPTIONS) {
+    if (o.target === "renderer") continue;
     const on = flags[o.id] === true;
     source = on ? o.apply(source) : o.revert(source);
     const present = source.includes(o.marker);
@@ -330,6 +382,29 @@ function patchBuildOptions(file: string, flags: Flags): void {
   }
   if (source !== original) fs.writeFileSync(file, source, "utf8");
   assertParses(file);
+}
+/** Renderer-side build options: the same idempotent transforms, run over every matching asset chunk. */
+function patchRendererOptions(assetsDir: string, flags: Flags): void {
+  const names = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir) : [];
+  for (const o of BUILD_OPTIONS) {
+    if (o.target !== "renderer" || !o.assets) continue;
+    const on = flags[o.id] === true;
+    let markers = 0;
+    for (const name of names.filter((n) => o.assets!.test(n))) {
+      const file = path.join(assetsDir, name);
+      const source = fs.readFileSync(file, "utf8");
+      const next = on ? o.apply(source) : o.revert(source);
+      if (next !== source) {
+        fs.writeFileSync(file, next, "utf8");
+        assertParses(file);
+      }
+      markers += countMarkers(next, o.marker);
+    }
+    const expected = o.expectedMarkers ?? 1;
+    if (on && markers < expected) warn(`${o.label}: only ${markers} of ${expected} anchors found in the renderer chunks (app version changed?); option incomplete`);
+    if (!on && markers > 0) warn(`${o.label}: ${markers} marker(s) could not be reverted`);
+    step(`${o.label}: ${on && markers >= expected ? "ON" : on ? "PARTIAL" : "off"}`);
+  }
 }
 /** A syntax error in the patched main script means the app will not start at all: check before packing. */
 function assertParses(file: string): void {
@@ -441,7 +516,14 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
   const problems: string[] = [];
   if (!main.includes(MAIN_MARKER)) problems.push("loader require missing from out/main/index.js");
   if (!main.includes(JSON.stringify(LOADER_MAIN))) problems.push("loader path in out/main/index.js does not match this repo");
-  for (const o of BUILD_OPTIONS) if (flags[o.id] && !main.includes(o.marker)) problems.push(`${o.label} requested but not present`);
+  for (const o of BUILD_OPTIONS) {
+    if (!flags[o.id]) continue;
+    if (o.target === "renderer" && o.assets) {
+      const chunks = asarLib.list(archive).filter((e) => o.assets!.test(path.posix.basename(e.path)) && e.path.startsWith("out/renderer/assets/"));
+      const markers = chunks.reduce((sum, e) => sum + countMarkers(read(e.path), o.marker), 0);
+      if (markers < (o.expectedMarkers ?? 1)) problems.push(`${o.label} requested but only ${markers} of ${o.expectedMarkers ?? 1} patch sites present`);
+    } else if (!main.includes(o.marker)) problems.push(`${o.label} requested but not present`);
+  }
   const preload = read("out/preload/index.js");
   if (!preload.includes(PRELOAD_BEGIN) || !preload.includes(PRELOAD_END)) problems.push("preload bridge block missing");
   if (!read("out/renderer/index.html").includes("script-src 'self' file:")) problems.push("CSP file: allowance missing");
@@ -507,6 +589,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   patchPreload(path.join(STAGING_DIR, "out", "preload", "index.js"));
   patchCsp(path.join(STAGING_DIR, "out", "renderer", "index.html"));
   patchScene(path.join(STAGING_DIR, "out", "renderer", "assets"));
+  patchRendererOptions(path.join(STAGING_DIR, "out", "renderer", "assets"), flags);
 
   step("repacking archive");
   const packed = asarLib.pack(sourceAsar, STAGING_DIR, PACKED_ASAR);

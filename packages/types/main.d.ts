@@ -11,6 +11,8 @@ declare namespace Usermod {
     fileName?: string;
     /** Send stage: the IPC channel that carried the G-code. */
     channel?: string;
+    /** Preview stage: the CAM endpoint the toolpath came from. Each call is one operation's G-code, not a whole program. */
+    endpoint?: string;
     /** True for the app's own scratch files under user data (validation, time estimate). */
     internal: boolean;
     /** This mod's block from mods.json "settings". Always treat fields as optional. */
@@ -44,9 +46,13 @@ declare namespace Usermod {
     "gcode-sent": { channel: string; fileName?: string; lines: number; bytes: number; runTimeSeconds?: number; gcode: string };
     /** G-code was written to a file by the app (after export-stage post-processors). */
     "gcode-exported": { filePath: string; fileName: string; lines: number; bytes: number; internal: boolean };
+    /** Emitted by the machine-state mod on every status frame (unthrottled) for other main mods. */
+    "machine-state": MachineState;
   }
   interface LoaderEventBus {
     on<K extends keyof LoaderEvents>(event: K, listener: (payload: LoaderEvents[K]) => void): () => void;
+    /** Main mods may publish the typed events too (machine-state does), so mods can build on each other in-process. */
+    emit<K extends keyof LoaderEvents>(event: K, payload: LoaderEvents[K]): void;
   }
 
   /**
@@ -83,6 +89,12 @@ declare namespace Usermod {
     intercept(channel: string, hooks: Interceptor): () => void;
     readStore(): NestStudio.Store;
     runPostprocessors(stage: Stage, gcode: string, ctx?: RunContextInput & { internal?: boolean }): Promise<string>;
+    /**
+     * Calls another main mod's handler in-process (the same functions UI mods reach with usermod.invoke), e.g.
+     * api.call<Usermod.MachineState>("machine:state"). Rejects when no active mod handles the channel. Like
+     * invoke<T>, the result type is the caller's claim about the other mod's contract.
+     */
+    call<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
   }
 
   interface MainMod<S extends object = Record<string, unknown>> {

@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/tool-library",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Export and import tools from the tool library as JSON, picking which tools to include and how to resolve id and slot clashes",
+  "usermod": {
+    "name": "tool-library",
+    "ui": "dist/index.js",
+    "order": 37,
+    "description": "Export and import tools from the tool library as JSON, picking which tools to include and how to resolve id and slot clashes"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

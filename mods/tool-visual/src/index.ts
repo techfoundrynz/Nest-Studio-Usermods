@@ -261,13 +261,12 @@
     for (const runtime of globalThis.__usermodSimRuntimes ?? []) hook(runtime);
   }, 500);
 
-  rt.menu.addAction({
+  window.usermodUI.toolbar.addButton({
     id: "tool-visual",
-    label: "Cutter model…",
-    section: "Appearance",
-    order: 40,
-    onClick: ({ close }) => {
-      close();
+    title: "Cutter model in the preview",
+    icon: () => window.usermodUI.icons.svg("M9 2h6v9l3 4v7H6v-7l3-4V2zm2 2v6.3L8.5 14H12v-2h2v2h1.5L13 10.3V4h-2z"),
+    order: 47,
+    onClick: () => {
       const ui = window.usermodUI;
       const modal = ui.modal("Cutter model", { width: 460 });
       const patched = Boolean(globalThis.__usermodSimRuntimes);

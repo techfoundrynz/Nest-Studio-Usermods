@@ -1,0 +1,24 @@
+{
+  "name": "@neststudio-mods/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Job lifecycle: desktop notifications and webhook when a run finishes, alarms or pauses, plus a run history with CSV export",
+  "usermod": {
+    "name": "jobs",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 30,
+    "description": "Job lifecycle: desktop notifications and webhook when a run finishes, alarms or pauses, plus a run history with CSV export"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

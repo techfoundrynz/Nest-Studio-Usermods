@@ -123,12 +123,55 @@ function loadConfig(): Usermod.Config {
           if (isRecord(value)) settings[key] = value;
         }
       }
-      state.config = { enabled, settings };
+      state.config = migrateConfig({ enabled, settings }, isRecord(parsed) ? parsed : {});
     }
   } catch (error) {
     recordError("config", error);
   }
   return state.config;
+}
+/* Mods that were folded into others keep working from an old mods.json: the old name enables the new mod and its
+ * settings are carried over (renamed where the merged mod uses different keys). The file is rewritten once. */
+interface Migration {
+  into: string;
+  settings(old: Record<string, unknown>, wasEnabled: boolean): Record<string, unknown>;
+}
+const pick = (o: Record<string, unknown>, map: Record<string, string>): Record<string, unknown> => Object.fromEntries(Object.entries(map).filter(([from]) => o[from] !== undefined).map(([from, to]) => [to, o[from]]));
+const MIGRATIONS: Record<string, Migration> = {
+  "keyboard-jog": { into: "jog", settings: (o, on) => ({ keyboardEnabled: on, ...pick(o, { feed: "keyboardFeed", zFeed: "keyboardZFeed", distance: "keyboardDistance", requireDeviceTab: "requireDeviceTab" }) }) },
+  "gamepad-jog": { into: "jog", settings: (o) => pick(o, { maxFeed: "gamepadMaxFeed", zFeed: "gamepadZFeed", deadzone: "deadzone", invertY: "invertY", stepMs: "stepMs", requireDeviceTab: "requireDeviceTab" }) },
+  "depth-guard": { into: "export-report", settings: (o) => ({ ...o }) },
+  "dev-shortcuts": { into: "app-tools", settings: (o) => ({ shortcuts: true, reloadShortcut: o.reload !== false }) },
+  "strip-comments": { into: "gcode-format", settings: (o, on) => ({ stripComments: on, ...pick(o, { keepHeader: "keepHeader", removeBlankLines: "removeBlankLines" }) }) },
+  "line-numbers": { into: "gcode-format", settings: (o, on) => ({ lineNumbers: on, ...pick(o, { start: "start", step: "step", skipComments: "skipComments" }) }) },
+  "job-notifier": { into: "jobs", settings: (o) => ({ ...o }) },
+  "job-history": { into: "jobs", settings: (o) => ({ ...o }) }
+};
+function migrateConfig(config: Usermod.Config, rawFile: Record<string, unknown>): Usermod.Config {
+  let changed = false;
+  const enabled = new Set(config.enabled);
+  const settings = { ...config.settings };
+  for (const [oldName, migration] of Object.entries(MIGRATIONS)) {
+    const wasEnabled = enabled.has(oldName);
+    const oldSettings = settings[oldName];
+    if (!wasEnabled && !oldSettings) continue;
+    settings[migration.into] = { ...(settings[migration.into] ?? {}), ...migration.settings(oldSettings ?? {}, wasEnabled) };
+    delete settings[oldName];
+    if (wasEnabled) {
+      enabled.delete(oldName);
+      enabled.add(migration.into);
+    }
+    changed = true;
+    log("info", `mods.json: "${oldName}" is now part of "${migration.into}"; settings carried over`);
+  }
+  if (!changed) return config;
+  const next: Usermod.Config = { enabled: [...enabled].sort(), settings };
+  try {
+    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify({ ...rawFile, enabled: next.enabled, settings: next.settings }, null, 2)}\n`, "utf8");
+  } catch (error) {
+    recordError("config-migrate", error);
+  }
+  return next;
 }
 function settingsFor(name: string): Record<string, unknown> {
   return state.config.settings[name] ?? {};
@@ -205,7 +248,7 @@ function isPostprocessor(value: unknown): value is Usermod.Postprocessor {
   return isRecord(value) && typeof value.process === "function";
 }
 function isStage(value: unknown): value is Usermod.Stage {
-  return value === "export" || value === "send";
+  return value === "export" || value === "send" || value === "preview";
 }
 function loadPostprocessors(): LoadedPostprocessor[] {
   const loaded: LoadedPostprocessor[] = [];
@@ -242,12 +285,28 @@ function isInternalPath(filePath: string): boolean {
     return false;
   }
 }
+/** Marker the preview stage leaves in the G-code so export/send do not apply the same processors twice. */
+const PREVIEW_MARKER = "(usermod-preview-applied:";
+const PREVIEW_MARKER_RE = /^\(usermod-preview-applied: ([^)]*)\)/gm;
+function previewAppliedNames(gcode: string): Set<string> {
+  const names = new Set<string>();
+  for (const m of gcode.matchAll(PREVIEW_MARKER_RE)) for (const n of (m[1] ?? "").split(",")) if (n.trim()) names.add(n.trim());
+  return names;
+}
+/** Processors the user chose to run when toolpaths are generated (toolpath-modifiers settings, "preview"). */
+function previewStageNames(): Set<string> {
+  const raw: unknown = settingsFor("toolpath-modifiers").preview;
+  return new Set(Array.isArray(raw) ? raw.filter((n): n is string => typeof n === "string") : []);
+}
 async function runPostprocessors(stage: Usermod.Stage, gcode: string, ctx: Usermod.RunContextInput & { internal?: boolean } = {}): Promise<string> {
   if (typeof gcode !== "string") return gcode;
   let current = gcode;
   const applied: string[] = [];
+  const previewNames = stage === "preview" ? previewStageNames() : null;
+  const alreadyApplied = stage === "preview" ? new Set<string>() : previewAppliedNames(gcode);
   for (const pp of state.postprocessors) {
-    if (!pp.stages.includes(stage)) continue;
+    if (previewNames ? !previewNames.has(pp.name) : !pp.stages.includes(stage)) continue;
+    if (alreadyApplied.has(pp.name)) continue; // done at generation time; the marker says so
     if (ctx.internal && !pp.includeInternal) continue;
     const fullCtx: Usermod.PostprocessorContext = {
       ...ctx,
@@ -272,7 +331,8 @@ async function runPostprocessors(stage: Usermod.Stage, gcode: string, ctx: Userm
     }
   }
   if (applied.length) {
-    log("info", `stage=${stage} applied [${applied.join(" -> ")}] target=${ctx.filePath ?? ctx.fileName ?? "?"} bytes=${gcode.length}->${current.length}`);
+    if (stage === "preview") current = `${PREVIEW_MARKER} ${applied.join(", ")})\n${current}`;
+    log("info", `stage=${stage} applied [${applied.join(" -> ")}] target=${ctx.filePath ?? ctx.fileName ?? ctx.endpoint ?? "?"} bytes=${gcode.length}->${current.length}`);
   }
   return current;
 }
@@ -305,6 +365,9 @@ const events: Usermod.LoaderEventBus = {
     const set = listenerSet(event);
     set.add(listener);
     return () => void set.delete(listener);
+  },
+  emit<K extends keyof Usermod.LoaderEvents>(event: K, payload: Usermod.LoaderEvents[K]) {
+    emit(event, payload);
   }
 };
 const countLines = (text: string): number => (text.match(/\n/g)?.length ?? 0) + (text.endsWith("\n") ? 0 : 1);
@@ -402,6 +465,8 @@ function wrapIpcResult(scope: string, fn: Usermod.IpcHandler): IpcListener {
     }
   };
 }
+/** Handlers registered by main mods, also callable in-process from other mods (api.call). */
+const modHandlers = new Map<string, Usermod.IpcHandler>();
 function createModApi(name: string): Usermod.MainModApi {
   return {
     name,
@@ -417,8 +482,15 @@ function createModApi(name: string): Usermod.MainModApi {
     error: (...values) => log("error", `[${name}]`, ...values),
     handle: (channel, fn) => {
       const full = `usermod:${channel}`;
+      modHandlers.set(channel, fn);
       ipcMain.removeHandler(full);
       originalHandle(full, wrapIpcResult(`mod-ipc:${name}:${channel}`, fn));
+    },
+    call: async <T>(channel: string, ...args: unknown[]): Promise<T> => {
+      const fn = modHandlers.get(channel);
+      if (!fn) throw new Error(`no active mod handles "${channel}"`);
+      // Same trust boundary as usermod.invoke<T>: the caller names the other mod's contract.
+      return (await fn(...args)) as T;
     },
     send: (channel, payload) => {
       getMainWindow()?.webContents.send(`usermod:${channel}`, payload);
@@ -598,8 +670,9 @@ function registerLoaderIpc(): void {
       if (typeof ctx.fileName === "string") input.fileName = ctx.fileName;
       if (typeof ctx.filePath === "string") input.filePath = ctx.filePath;
       if (typeof ctx.channel === "string") input.channel = ctx.channel;
+      if (typeof ctx.endpoint === "string") input.endpoint = ctx.endpoint;
     }
-    return runPostprocessors(stage === "send" ? "send" : "export", gcode, { ...input, internal: false });
+    return runPostprocessors(isStage(stage) ? stage : "export", gcode, { ...input, internal: false });
   });
 }
 
