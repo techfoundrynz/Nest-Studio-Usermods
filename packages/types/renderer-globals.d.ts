@@ -89,9 +89,25 @@ interface UsermodBox3Like {
   min: UsermodVector3Like;
   max: UsermodVector3Like;
 }
+/** Enough of three.js BufferGeometry / BufferAttribute to build a replacement cutter procedurally. */
+interface UsermodBufferAttributeLike {
+  array: ArrayLike<number>;
+  itemSize: number;
+}
+interface UsermodGeometryLike {
+  boundingBox: UsermodBox3Like | null;
+  getAttribute(name: string): UsermodBufferAttributeLike | undefined;
+  setAttribute(name: string, attribute: UsermodBufferAttributeLike): UsermodGeometryLike;
+  setIndex(index: number[]): UsermodGeometryLike;
+  computeVertexNormals(): void;
+  computeBoundingBox(): void;
+  dispose(): void;
+}
+type UsermodGeometryCtor = new () => UsermodGeometryLike;
+type UsermodAttributeCtor = new (array: Float32Array, itemSize: number) => UsermodBufferAttributeLike;
 interface UsermodCuttingToolLike {
   root: { visible: boolean; scale: UsermodVector3Like };
-  mesh: { scale: UsermodVector3Like; geometry: { boundingBox: UsermodBox3Like | null } } | null;
+  mesh: { scale: UsermodVector3Like; geometry: UsermodGeometryLike } | null;
 }
 interface UsermodSimRuntimeLike {
   cuttingTool: UsermodCuttingToolLike | null;
