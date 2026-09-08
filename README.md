@@ -11,14 +11,15 @@ workspace. It adds:
 - **Update-proof install**: an interactive installer rebuilds `app.asar` and can be re-run after every
   app update.
 
-Tested against Nest Studio 1.1.0 (Electron 39.8.10) on Windows 11. Modifying the app may be against the
-vendor's terms of use; the `send` stage changes what reaches a real machine. Use with care.
-Licensed under the GPL-3.0 (see `LICENSE`).
+Tested against Nest Studio 1.1.0 (Electron 39.8.10) on Windows 11 and macOS (Apple Silicon). Modifying
+the app may be against the vendor's terms of use; the `send` stage changes what reaches a real machine.
+Use with care. Licensed under the GPL-3.0 (see `LICENSE`).
 
 ## Install
 
 Requirements: Node.js 20+, pnpm 10+ (`corepack enable` or `npm i -g pnpm`), Nest Studio installed in
-`C:\Program Files\nest-studio` (pass `--install-root=<dir>` otherwise).
+`C:\Program Files\nest-studio` on Windows or `/Applications/Nest Studio.app` on macOS (pass
+`--install-root=<dir>` otherwise; on macOS it points at the `.app` bundle).
 
 ```powershell
 git clone <this repo> C:\Repos\NestStudio_UserMods
@@ -26,6 +27,16 @@ cd C:\Repos\NestStudio_UserMods
 pnpm install
 pnpm run install:app          # interactive menu; the final copy step needs an elevated terminal
 ```
+
+On macOS the final copy step needs permission to modify another app's bundle: grant your terminal
+**App Management** access (System Settings ▸ Privacy & Security ▸ App Management) or run the install
+with `sudo`. Swapping `app.asar` breaks the bundle's code-signature seal; an already-approved app keeps
+launching (Gatekeeper only checks the seal on first launch, and this build's asar-integrity fuse is
+off), but if macOS ever refuses to start it:
+`xattr -dr com.apple.quarantine "/Applications/Nest Studio.app" && codesign --force --deep --sign - "/Applications/Nest Studio.app"`
+(ad-hoc re-signing resets TCC grants such as camera access, and in-app auto-update may need a fresh
+download afterwards). `pnpm run uninstall:app` restores the untouched original archive, and with it the
+vendor signature.
 
 The menu offers **Install / re-install**, **Build only**, **Enable / disable mods** and **Uninstall**.
 Under the hood the installer builds the workspace, extracts `resources\app.asar` into `build\app`,
@@ -59,7 +70,7 @@ Build options are baked into the patched archive. The interactive install asks f
 | `pnpm run build:asar` | build `build\app.asar` without touching the install (no admin) |
 | `pnpm run mods` | CLI fallback for enabling/disabling mods (writes `mods.json`) |
 | `pnpm run uninstall:app` | restore `app.asar.orig` |
-| `tools\install.ps1 [args]` | thin PowerShell wrapper for elevated shells |
+| `tools\install.ps1 [args]` | thin PowerShell wrapper for elevated shells (Windows) |
 
 The repo folder **is** the live mod directory: the patched app requires
 `packages\loader\dist\main.js` from wherever you ran the installer, and mods load from `mods\*\dist`

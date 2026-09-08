@@ -67,7 +67,7 @@
         ui.buttonRow([ui.button(current() === "dark" ? "Switch to light" : "Switch to dark", toggleTheme, { primary: true })]),
         ui.settingsForm("dark-mode", {
           title: "Settings",
-          fields: [{ key: "followSystem", label: "Follow the OS light/dark setting", type: "boolean", help: "Applies on startup and when Windows switches mode." }],
+          fields: [{ key: "followSystem", label: "Follow the OS light/dark setting", type: "boolean", help: "Applies on startup and when the OS switches mode." }],
           reloadPostprocessors: false,
           onSaved: (values) => {
             settings = { followSystem: values.followSystem === true };

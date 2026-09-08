@@ -14,9 +14,10 @@
  *          --devtools / --no-devtools   re-enable Chromium DevTools in the app (F12 toggles them)
  *          --cam-docs / --no-cam-docs   start the CAM service with ENABLE_DOCS=1 (Swagger at 127.0.0.1:9630/docs)
  *
- * Nest Studio's Electron build only loads code from resources\app.asar, so the loader is injected by
- * rebuilding that archive: extract -> patch -> repack -> back up the original as app.asar.orig ->
- * copy into place. Only the final copy needs an elevated shell.
+ * Nest Studio's Electron build only loads code from app.asar (resources\ on Windows, Contents/Resources
+ * inside the .app on macOS), so the loader is injected by rebuilding that archive: extract -> patch ->
+ * repack -> back up the original as app.asar.orig -> copy into place. Only the final copy needs write
+ * access to the install (elevated shell on Windows; App Management permission or sudo on macOS).
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -25,6 +26,10 @@ import * as path from "node:path";
 import prompts from "prompts";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
+const IS_MAC = process.platform === "darwin";
+const DEFAULT_INSTALL_ROOT = IS_MAC ? "/Applications/Nest Studio.app" : "C:\\Program Files\\nest-studio";
+/** Windows keeps resources next to the exe; on macOS they live inside the bundle (--install-root is the .app). */
+const resourcesDir = (installRoot: string): string => (IS_MAC ? path.join(installRoot, "Contents", "Resources") : path.join(installRoot, "resources"));
 const LOADER_MAIN = path.join(ROOT, "packages", "loader", "dist", "main.js");
 const LOADER_PRELOAD = path.join(ROOT, "packages", "loader", "dist", "preload.js");
 const BUILD_DIR = path.join(ROOT, "build");
@@ -116,7 +121,7 @@ function parseArgs(argv: string[]): Options {
     skipBuild: false,
     yes: false,
     allowUntested: false,
-    installRoot: "C:\\Program Files\\nest-studio",
+    installRoot: DEFAULT_INSTALL_ROOT,
     enableMods: [],
     disableMods: [],
     disableAllMods: false,
@@ -168,12 +173,25 @@ function writeText(file: string, text: string): void {
   fs.writeFileSync(file, text, "utf8");
 }
 function runningNestProcesses(): string[] {
-  if (process.platform !== "win32") return [];
-  const out = spawnSync("tasklist", ["/NH", "/FO", "CSV"], { encoding: "utf8" }).stdout ?? "";
-  return out
-    .split(/\r?\n/)
-    .filter((line) => /^"(nest-studio\.exe|Nest Studio Service\.exe)"/i.test(line))
-    .map((line) => line.split('","')[0]!.replace(/^"/, ""));
+  if (process.platform === "win32") {
+    const out = spawnSync("tasklist", ["/NH", "/FO", "CSV"], { encoding: "utf8" }).stdout ?? "";
+    return out
+      .split(/\r?\n/)
+      .filter((line) => /^"(nest-studio\.exe|Nest Studio Service\.exe)"/i.test(line))
+      .map((line) => line.split('","')[0]!.replace(/^"/, ""));
+  }
+  if (IS_MAC) {
+    // Matches the app, its helpers and the CAM service, which all run from inside the bundle.
+    const out = spawnSync("pgrep", ["-fl", "Nest Studio.app/Contents"], { encoding: "utf8" }).stdout ?? "";
+    return out
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const executable = line.replace(/^\d+\s+/, "").split(" -")[0]!;
+        return /\/([^/]+)$/.exec(executable)?.[1] ?? "Nest Studio";
+      });
+  }
+  return [];
 }
 function assertClosed(): void {
   const running = runningNestProcesses();
@@ -185,7 +203,11 @@ function assertWritable(dir: string): void {
     fs.writeFileSync(probe, "probe");
     fs.unlinkSync(probe);
   } catch {
-    fail(`cannot write to ${dir}. Run this from an elevated (Administrator) terminal.`);
+    fail(
+      IS_MAC
+        ? `cannot write to ${dir}. Grant your terminal App Management access (System Settings > Privacy & Security > App Management) or re-run with sudo.`
+        : `cannot write to ${dir}. Run this from an elevated (Administrator) terminal.`
+    );
   }
 }
 function runPnpm(args: string[]): void {
@@ -435,10 +457,10 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
 
 /* ----------------------------------------------------------------- install */
 async function install(options: Options, buildOnly: boolean): Promise<void> {
-  const resources = path.join(options.installRoot, "resources");
+  const resources = resourcesDir(options.installRoot);
   const asar = path.join(resources, "app.asar");
   const asarOrig = path.join(resources, "app.asar.orig");
-  if (!fs.existsSync(asar)) fail(`app.asar not found at ${asar} (use --install-root=<dir>)`);
+  if (!fs.existsSync(asar)) fail(`app.asar not found at ${asar} (use --install-root=<dir>${IS_MAC ? ", pointing at the .app bundle" : ""})`);
   ensureBuilt(options);
   const asarLib = await loadAsar();
 
@@ -508,7 +530,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   writeText(FLAGS_FILE, JSON.stringify({ appVersion: version, installedAt: new Date().toISOString(), flags }, null, 2));
   const staleDir = path.join(resources, "app");
   if (fs.existsSync(path.join(staleDir, ".usermod-stamp.json"))) {
-    step("removing stale resources\\app directory from the earlier install method");
+    step(`removing stale ${staleDir} directory from the earlier install method`);
     fs.rmSync(staleDir, { recursive: true, force: true });
   }
   ok(`\nNest Studio ${version} is now patched for user mods.`);
@@ -517,10 +539,17 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   console.log(`  options : ${BUILD_OPTIONS.map((o) => `${o.label}=${flags[o.id] ? "on" : "off"}`).join(", ")}`);
   console.log(`  log     : ${path.join(ROOT, "usermod.log")}`);
   console.log("Start Nest Studio normally. Re-run after any app update; --uninstall restores the original.");
+  if (IS_MAC) {
+    console.log(
+      "macOS: swapping app.asar breaks the bundle's code-signature seal; already-approved apps still launch (Gatekeeper only\n" +
+        `checks the seal on first launch, and this build's asar-integrity fuse is off). If macOS ever refuses to start it, run:\n` +
+        `  xattr -dr com.apple.quarantine "${options.installRoot}" && codesign --force --deep --sign - "${options.installRoot}"`
+    );
+  }
 }
 
 async function uninstall(options: Options): Promise<void> {
-  const resources = path.join(options.installRoot, "resources");
+  const resources = resourcesDir(options.installRoot);
   const asar = path.join(resources, "app.asar");
   const asarOrig = path.join(resources, "app.asar.orig");
   if (!fs.existsSync(asarOrig)) fail(`no backup at ${asarOrig}; nothing to restore`);
@@ -538,14 +567,14 @@ async function uninstall(options: Options): Promise<void> {
 
 /* -------------------------------------------------------------------- menu */
 async function menu(options: Options): Promise<void> {
-  const resources = path.join(options.installRoot, "resources");
+  const resources = resourcesDir(options.installRoot);
   const installed = fs.existsSync(path.join(resources, "app.asar.orig"));
   const answer = await prompts({
     type: "select",
     name: "action",
     message: `Nest Studio user mods  ${color(90, `(${options.installRoot}${installed ? ", loader installed" : ", not installed"})`)}`,
     choices: [
-      { title: installed ? "Re-install / update loader" : "Install loader", value: "install", description: "Rebuild app.asar with the loader and build options (needs an elevated terminal)" },
+      { title: installed ? "Re-install / update loader" : "Install loader", value: "install", description: `Rebuild app.asar with the loader and build options (needs ${IS_MAC ? "write access to the app bundle" : "an elevated terminal"})` },
       { title: "Build only", value: "build-only", description: "Build build/app.asar without touching the install" },
       { title: "Enable / disable mods", value: "select-mods", description: "Fallback for the in-app Mods… dialog, e.g. to switch off a mod that breaks the UI" },
       { title: "Uninstall", value: "uninstall", description: "Restore the original app.asar", disabled: !installed },
@@ -562,7 +591,7 @@ async function menu(options: Options): Promise<void> {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  if (process.platform !== "win32") warn("Nest Studio user mods target Windows; paths and process checks assume it.");
+  if (process.platform !== "win32" && !IS_MAC) warn("Nest Studio user mods target Windows and macOS; paths and process checks assume them.");
   if (applyModFlags(options) && options.action === "menu") return;
   switch (options.action) {
     case "select-mods":

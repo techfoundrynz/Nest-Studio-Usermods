@@ -16,6 +16,15 @@ Set variables for one launch from PowerShell:
 $env:ENABLE_DOCS = '1'; & 'C:\Program Files\nest-studio\nest-studio.exe'
 ```
 
+The macOS build (verified against 1.1.0) has the same layout inside the bundle: the Electron binary is
+`/Applications/Nest Studio.app/Contents/MacOS/Nest Studio`, the CAM service and helper tools live under
+`Contents/Resources` (`server/3Axis/`, `ArcWelder` — same names without `.exe`), and the fuse states
+match the Windows build. From zsh:
+
+```zsh
+ENABLE_DOCS=1 '/Applications/Nest Studio.app/Contents/MacOS/Nest Studio'
+```
+
 ## Environment variables
 
 | Variable | Consumer | Effect | Status |

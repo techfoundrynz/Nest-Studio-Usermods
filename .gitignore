@@ -17,6 +17,7 @@ data/*
 .vscode/
 Thumbs.db
 *.tmp
+.DS_Store
 
 # per-machine mod selection and settings (created from mods.default.json)
 mods.json

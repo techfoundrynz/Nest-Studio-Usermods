@@ -9,8 +9,14 @@ import * as path from "node:path";
 type Handler = (event: unknown, ...args: unknown[]) => unknown;
 const handlers = new Map<string, Handler>();
 const opened: string[] = [];
-const USER_DATA = String.raw`C:\Users\test\AppData\Roaming\Nest Studio`;
-const arcWelder = String.raw`C:\Program Files\nest-studio\resources\ArcWelder.exe`;
+const USER_DATA =
+  process.platform === "win32"
+    ? String.raw`C:\Users\test\AppData\Roaming\Nest Studio`
+    : "/Users/test/Library/Application Support/Nest Studio";
+const arcWelder =
+  process.platform === "darwin"
+    ? "/Applications/Nest Studio.app/Contents/Resources/ArcWelder"
+    : String.raw`C:\Program Files\nest-studio\resources\ArcWelder.exe`;
 if (fs.existsSync(arcWelder) && !process.env.NEST_ARCWELDER) process.env.NEST_ARCWELDER = arcWelder;
 const webContentsHooks: ((event: unknown, contents: unknown) => void)[] = [];
 const fakeElectron = {
@@ -116,7 +122,7 @@ void (async () => {
   check("tool-change-guard guards the second change", /\(usermod: tool change T2\)\nM5\nM9\nG53 G90 G0 Z-1\nT2 M6/.test(out2), out2.split("\n").slice(9, 16).join(" | "));
   if (process.env.NEST_ARCWELDER) {
     check("arc-fit ran through ArcWelder and kept the program", /G1 X20(\.0+)? Y15(\.0+)?/.test(out2) && out2.includes("(File: two.nc)") && out2.trim().endsWith("M30"), out2.split("\n").slice(-3).join(" | "));
-  } else console.log("SKIP arc-fit (ArcWelder.exe not found)");
+  } else console.log("SKIP arc-fit (ArcWelder not found)");
 
   written = null;
   await invoke("store:write-file", `${USER_DATA}${sep}gcode-work${sep}checkGcode.nc`, gcode);

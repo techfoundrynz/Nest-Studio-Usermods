@@ -1,7 +1,7 @@
 /*
  * Job notifier (main process). Watches the machine status stream the app forwards to its renderer
  * (channel "device:stream-event", type "machine_status") and the loader's gcode-sent event, derives job
- * start / complete / error / pause transitions, and raises Windows notifications and an optional webhook.
+ * start / complete / error / pause transitions, and raises desktop notifications and an optional webhook.
  *
  * mods.json settings ("job-notifier"):
  *   notifyComplete  toast when a job finishes                         (default true)
@@ -47,7 +47,7 @@ interface JobState {
 }
 
 const mod: Usermod.MainMod<Settings> = {
-  description: "Windows notifications and optional webhook when a machine job completes, errors or pauses",
+  description: "Desktop notifications and optional webhook when a machine job completes, errors or pauses",
   activate(api) {
     const { Notification, app } = api.electron;
     let settings: Settings = current();
