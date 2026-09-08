@@ -134,7 +134,12 @@
     if (p.pitch <= 0 || p.length <= 0 || p.majorDiameter <= 0 || p.cutterDiameter <= 0) em.warnings.push("Diameter, pitch, length and cutter diameter must all be positive.");
     if (p.length > 4 * p.cutterDiameter) em.warnings.push("Thread length is more than 4x the cutter diameter: check the thread mill's flute length.");
     if (!p.centers.length) em.warnings.push("No thread positions given.");
-    const finalR = p.kind === "internal" ? p.majorDiameter / 2 - p.cutterDiameter / 2 : p.majorDiameter / 2 + p.cutterDiameter / 2;
+    /*
+     * Orbit radius of the tool centre at full thread depth. Internal: the cutter's OUTER edge has to reach the
+     * major radius, so centre = major/2 - cutter/2. External: its INNER edge has to reach the minor radius, so
+     * centre = major/2 + cutter/2 - depth; orbiting at major/2 + cutter/2 only grazes the outside diameter.
+     */
+    const finalR = p.kind === "internal" ? p.majorDiameter / 2 - p.cutterDiameter / 2 : p.majorDiameter / 2 + p.cutterDiameter / 2 - depth;
     if (finalR <= 0) em.warnings.push("Cutter is too large for this thread.");
     // Right-hand internal climb: counter-clockwise (G3) helix going up. External swaps direction; left-hand and conventional each swap again.
     let ccw = p.kind === "internal";
@@ -164,7 +169,7 @@
     for (const [ci, c] of p.centers.entries()) {
       em.comment(`thread ${ci + 1} at X${fmt(c.x)} Y${fmt(c.y)}`);
       for (const [ri, r] of radii.entries()) {
-        em.comment(ri === radii.length - 1 && p.springPass ? "spring pass" : `pass ${ri + 1} of ${radii.length}`);
+        em.comment(ri === radii.length - 1 && p.springPass ? `spring pass at full depth (Ø${fmt(p.majorDiameter)})` : `pass ${ri + 1} of ${passes}: ${fmt(p.kind === "internal" ? (r - finalR + depth) : (depth - (r - finalR)))} mm of ${fmt(depth)} mm thread depth`);
         if (p.kind === "internal") {
           em.rapid({ x: c.x, y: c.y });
           em.rapid({ z: Math.min(p.safeZ, p.topZ + 2) });
