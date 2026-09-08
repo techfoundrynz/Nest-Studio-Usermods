@@ -59,6 +59,12 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
 
   mods/export-copy:
     devDependencies:
@@ -77,6 +83,12 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
 
   mods/feed-override:
     devDependencies:
@@ -89,6 +101,12 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
 
   mods/iso-view:
     devDependencies:
@@ -101,6 +119,12 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
 
   mods/keyboard-jog:
     devDependencies:
@@ -125,6 +149,12 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
 
   mods/program-header:
     devDependencies:
@@ -137,18 +167,6 @@ importers:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
-
-  mods/react-demo:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.7
-        version: 19.2.7(@types/react@19.2.18)
 
   mods/safe-shutdown:
     devDependencies:
@@ -213,25 +231,6 @@ importers:
         specifier: workspace:*
         version: link:../types
 
-  packages/react-runtime:
-    dependencies:
-      react:
-        specifier: 19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: 19.2.8
-        version: 19.2.8(react@19.2.8)
-    devDependencies:
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.7
-        version: 19.2.7(@types/react@19.2.18)
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
-
   packages/types:
     devDependencies:
       '@types/react':
@@ -242,10 +241,26 @@ importers:
         version: 19.2.7(@types/react@19.2.18)
 
   packages/ui-kit:
+    dependencies:
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../types
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.7
+        version: 19.2.7(@types/react@19.2.18)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
 
 packages:
 

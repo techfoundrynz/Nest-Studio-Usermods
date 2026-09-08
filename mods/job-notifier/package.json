@@ -16,6 +16,8 @@
     "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
   },
   "devDependencies": {
-    "@neststudio-usermods/types": "workspace:*"
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7"
   }
 }

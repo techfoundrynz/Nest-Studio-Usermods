@@ -118,10 +118,16 @@ declare namespace Usermod {
     duration?: number;
     kind?: "info" | "success" | "warn" | "error";
   }
+  interface ModalOptions {
+    width?: number;
+    /** Called once when the modal closes (Escape, backdrop, the x button or close()). */
+    onClose?(): void;
+  }
   interface ModalHandle {
     root: HTMLElement;
     body: HTMLElement;
     close(): void;
+    isOpen(): boolean;
   }
   interface MenuActionContext {
     close(): void;
@@ -167,7 +173,7 @@ declare namespace Usermod {
     addStyle(css: string, id?: string): HTMLStyleElement;
     el<K extends keyof HTMLElementTagNameMap>(tag: K, props?: ElProps, children?: ElChild | ElChild[]): HTMLElementTagNameMap[K];
     toast(message: string, options?: ToastOptions): void;
-    modal(title: string, options?: { width?: number }): ModalHandle;
+    modal(title: string, options?: ModalOptions): ModalHandle;
     log(level: LogLevel, ...values: unknown[]): void;
     cam: CamClient;
     formatDuration(seconds: number): string;
@@ -249,7 +255,7 @@ declare namespace Usermod {
     };
     popover(anchor: HTMLElement, options?: PopoverOptions): PopoverHandle;
     closePopovers(): void;
-    modal(title: string, options?: { width?: number }): ModalHandle;
+    modal(title: string, options?: ModalOptions): ModalHandle;
     button(label: string, onClick: (event: MouseEvent) => void | Promise<void>, options?: ButtonOptions): HTMLButtonElement;
     buttonRow(buttons: ElChild[]): HTMLDivElement;
     section(title: string, children?: ElChild | ElChild[]): HTMLElement;
@@ -376,5 +382,34 @@ declare namespace NestStudio {
     getSerialPorts(): Promise<Result<unknown>>;
     onStreamEvent(listener: (event: unknown) => void): () => void;
     [other: string]: unknown;
+  }
+}
+
+/* Payload of the machine-state mod's "machine:state" channel (invoke for the current value, usermod.on for
+ * updates). Declared here so main mods, UI mods and the kit's useMachineState() share one shape. */
+declare namespace Usermod {
+  type MachinePhase = "idle" | "running" | "paused" | "alarm" | "disconnected";
+  interface MachineToolChange {
+    line: number;
+    tool: string | null;
+  }
+  interface MachineJob {
+    fileName: string | null;
+    lines: number | null;
+    runTimeSeconds: number | null;
+    startedAt: number | null;
+    toolChanges: MachineToolChange[];
+  }
+  interface MachineState {
+    connected: boolean;
+    status: string | null;
+    alarm: string | null;
+    phase: MachinePhase;
+    line: number | null;
+    job: MachineJob;
+    elapsedSeconds: number;
+    progress: number | null;
+    etaSeconds: number | null;
+    updatedAt: number;
   }
 }

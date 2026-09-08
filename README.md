@@ -84,8 +84,8 @@ packages/
   loader/      @neststudio-usermods/loader     main.ts (main-process loader), preload.ts (bridge), ui-runtime.ts, tests/
   asar/        @neststudio-usermods/asar       dependency-free asar extract/pack/list/cat (library + nest-asar CLI)
   installer/   @neststudio-usermods/installer  interactive installer (tsx + prompts)
-  ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms
-  react-runtime/ @neststudio-usermods/react-runtime  React 19 + ReactDOM bundled (esbuild) as the globals React / ReactDOM + usermodReactRuntime.mount() for TSX mods
+  ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms; imperative DOM helpers
+                                               plus bundled React 19 with matching components and hooks (usermodUI.react) for TSX mods
 mods/
   feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
   strip-comments, line-numbers                                                              (post-processors)
@@ -125,7 +125,6 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `export-report` | post + ui | JSON stats report per export (bounds, tools, feeds) in `data/reports`; "Last export report…" in the menu |
 | `iso-view` | ui | Toolbar toggle between perspective and an isometric-style view of the 3D scene; right-click for Top/Front/Right/Iso/Reset |
 | `tool-visual` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper/V, drill); the app uses one fixed bit |
-| `react-demo` | ui (React) | Reference TSX mod: live machine-state panel in a modal, mounted with the bundled React runtime |
 | `machine-state` | main | Shared machine status / progress / ETA (`machine:state`) for other mods; optional console log to `data/console` |
 | `status-hud` | ui | Always-visible status pill with progress bar and ETA; click for details |
 | `device-macros` | ui | Toolbar button with user-defined G-code / command macros (with confirmation) |
@@ -157,7 +156,9 @@ pnpm test           # build, then run the loader harness under a stubbed Electro
 Writing a mod: copy one of the `mods/*` packages, edit `src/index.ts` against the `Usermod.*` types,
 add the `usermod` manifest, run `pnpm install` (links the types package) and `pnpm run build`. UI mods
 build on `window.usermodUI` (toolbar buttons next to the Settings gear, popovers, modals, form and
-settings helpers); `mods/mods-menu` and `mods/dark-mode` are the reference examples. See
+settings helpers), either imperatively (`mods/dark-mode`, `mods/iso-view`) or in React/TSX through
+`usermodUI.react`, which bundles React 19 with components and hooks (`mods/mods-menu`, `mods/gcode-lab`,
+`mods/device-macros` are the references; no per-mod bundler, TSX compiles to one injected script). See
 [docs/mod-api.md](docs/mod-api.md) for the API, [docs/architecture.md](docs/architecture.md) for how the
 app is put together and why the installer repacks the archive, and
 [docs/launch-options.md](docs/launch-options.md) for environment variables, switches, ports and helper

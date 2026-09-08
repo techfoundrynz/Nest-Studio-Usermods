@@ -6,5 +6,5 @@
   "description": "Inspect, validate, time-estimate and post-process any G-code file",
   "usermod": { "name": "gcode-lab", "ui": "dist/index.js", "order": 30, "description": "Inspect, validate, time-estimate and post-process any G-code file" },
   "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
-  "devDependencies": { "@neststudio-usermods/types": "workspace:*" }
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*", "@types/react": "19.2.18", "@types/react-dom": "19.2.7" }
 }

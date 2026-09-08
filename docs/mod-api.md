@@ -82,13 +82,14 @@ Classic scripts (an IIFE per file) injected after the UI runtime. Globals are ty
 
 ### `window.usermodUI` (`Usermod.UI`, from `packages/ui-kit`)
 
-The toolkit for building mod UI that looks like the MODS menu. Injected after the runtime, before mods.
+The toolkit for building mod UI that looks like the MODS menu. Injected after the runtime, before mods. Every
+helper below has a React twin under `ui.react` (next section); pick whichever fits the mod.
 
 | Member | Purpose |
 | --- | --- |
 | `toolbar.addButton({ id, title, icon, onClick, order })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove` |
 | `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
-| `modal(title, { width })` | centred dialog (`{ root, body, close }`) |
+| `modal(title, { width, onClose })` | centred dialog (`{ root, body, close, isOpen }`) |
 | `button(label, onClick, { primary, title, disabled })`, `buttonRow([...])` | buttons; async errors become toasts |
 | `section(title, children)`, `list(items, render, empty)`, `kv(pairs)` | panel building blocks |
 | `toggle(label, checked, onChange, help)`, `select(...)`, `input(...)` | form controls |
@@ -130,20 +131,33 @@ store and ships full token sets for both. `dark-mode` switches it by writing the
 
 ## React UI mods (TSX)
 
-`packages/react-runtime` bundles React 19 + ReactDOM into one classic script that the loader injects after
-the UI kit. It exposes the classic UMD globals `React` and `ReactDOM` (client API) plus
-`window.usermodReactRuntime.mount(container, element)`, which creates or reuses a root and returns an
-unmount function. It is a separate React from the app's own: mount only into DOM you own (kit modal or
-popover bodies, your own elements), never into the app's tree.
+The kit bundles React 19 + ReactDOM. `window.usermodUI.react` (`Usermod.ReactKit`) is the React face of the
+same toolkit; the imperative helpers and these components emit the same class names, so both looks are
+identical and can be mixed. The kit also publishes the classic UMD globals `window.React` / `window.ReactDOM`,
+so a mod compiled with `"jsx": "react"` needs nothing else: JSX becomes `React.createElement` against that
+global and the mod is still one plain injected script. It is a separate React from the app's own: mount only
+into DOM you own (kit modal / popover bodies, your own elements), never into the app's tree.
 
-Mod tsconfig for TSX, still emitted as a plain injected script (no imports):
+| Member | Purpose |
+| --- | --- |
+| `mount(container, element)` | render into an element you own; returns an unmount function (one root per container) |
+| `modal(title, element, { width, onClose })`, `popover(anchor, element, options)` | kit containers whose body is a React tree, unmounted automatically on close |
+| `Section`, `Sub`, `KV`, `List`, `Row`, `Mono`, `Err`, `Loading` | layout / display twins of `section`, `kv`, `list`, `buttonRow`… |
+| `Button`, `Toggle`, `Select`, `Input` | controls; `Button` turns async errors into toasts like `ui.button()` |
+| `SettingsForm` | `ui.settingsForm()` as a component (`modName`, `fields`, `reloadPostprocessors`, `onSaved`) |
+| `useInfo()`, `useInvoke<T>(channel, args)`, `useAsync(fn, deps)` | `{ data, error, loading, refresh }` for loader data |
+| `useEvent<T>(channel, handler)` | `usermod.on` for the component's lifetime |
+| `useMachineState()` | live `Usermod.MachineState` from the machine-state mod |
+| `useRoute()` | current hash route |
+
+Mod tsconfig for TSX (types come through the normal renderer entry, which includes `types/react`):
 
 ```json
 {
   "compilerOptions": {
     "module": "None",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["@neststudio-usermods/types/renderer", "@neststudio-usermods/types/react"],
+    "types": ["@neststudio-usermods/types/renderer"],
     "jsx": "react",
     "rootDir": "src", "outDir": "dist"
   },
@@ -151,10 +165,22 @@ Mod tsconfig for TSX, still emitted as a plain injected script (no imports):
 }
 ```
 
-with `@types/react` / `@types/react-dom` as devDependencies (pinned like everything else). `@types/react`
-declares the global `React` namespace for script files, so hooks are `const { useState } = React;` and JSX
-compiles to `React.createElement` with full element typing. `mods/react-demo` is the reference: a live
-machine-state panel mounted into a kit modal and unmounted when the modal closes.
+with `@types/react` / `@types/react-dom` pinned in the mod's devDependencies. Hooks are `React.useState(...)`
+off the global namespace. Pattern:
+
+```tsx
+const ui = window.usermodUI;
+const { Section, KV, Button, Row, useMachineState } = ui.react;
+function Panel(): React.JSX.Element {
+  const m = useMachineState();
+  return <Section title="Machine">{m ? <KV pairs={[["Status", m.status ?? "—"]]} /> : "no data"}</Section>;
+}
+rt.menu.addAction({ id: "x", label: "Panel…", onClick: ({ close }) => { close(); ui.react.modal("Machine", <Panel />, { width: 420 }); } });
+```
+
+References: `mods/mods-menu` (menu panel + Mods… dialog), `mods/gcode-lab` (drop zone, async actions),
+`mods/device-macros` (popover + editor form), `mods/job-notifier` and `mods/export-report` (small panels).
+Small DOM-patching mods (dark-mode, iso-view, status-hud, keyboard-jog, tool-visual) stay imperative on purpose.
 
 ## Main mods (main process)
 

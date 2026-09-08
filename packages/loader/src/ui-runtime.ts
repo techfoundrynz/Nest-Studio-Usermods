@@ -91,14 +91,18 @@
   }
 
   /* Modal: closes on backdrop click or Escape. */
-  function modal(title: string, { width = 720 }: { width?: number } = {}): Usermod.ModalHandle {
+  function modal(title: string, { width = 720, onClose }: Usermod.ModalOptions = {}): Usermod.ModalHandle {
     const body = el("div", { class: "usermod-modal-body" });
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") close();
     };
+    let open = true;
     const close = (): void => {
+      if (!open) return;
+      open = false;
       root.remove();
       document.removeEventListener("keydown", onKey);
+      onClose?.();
     };
     const root = el("div", { class: "usermod-modal-backdrop", onMousedown: (event: MouseEvent) => event.target === root && close() }, [
       el("div", { class: "usermod-modal", role: "dialog", style: { width: `${width}px` } }, [
@@ -108,7 +112,7 @@
     ]);
     document.addEventListener("keydown", onKey);
     document.body.appendChild(root);
-    return { root, body, close };
+    return { root, body, close, isOpen: () => open };
   }
 
   addStyle(

@@ -1,1 +1,1 @@
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "module": "None", "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["@neststudio-usermods/types/renderer"], "alwaysStrict": false, "rootDir": "src", "outDir": "dist" }, "include": ["src/index.ts"] }
+{ "extends": "../../tsconfig.base.json", "compilerOptions": { "module": "None", "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["@neststudio-usermods/types/renderer"], "alwaysStrict": false, "jsx": "react", "rootDir": "src", "outDir": "dist" }, "include": ["src/index.tsx"] }

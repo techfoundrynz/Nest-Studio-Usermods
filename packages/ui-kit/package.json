@@ -1,15 +1,22 @@
 {
   "name": "@neststudio-usermods/ui-kit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Renderer UI toolkit for Nest Studio user mods: toolbar buttons, popovers, modals, form and settings helpers (window.usermodUI)",
+  "description": "Renderer UI toolkit for Nest Studio user mods (window.usermodUI): toolbar buttons, popovers, modals, forms and settings forms, usable imperatively or through bundled React 19 components and hooks (window.usermodUI.react)",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+    "build": "tsc -p tsconfig.json --noEmit && node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@neststudio-usermods/types": "workspace:*"
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "esbuild": "0.28.2"
   }
 }

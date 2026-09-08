@@ -454,14 +454,11 @@ function loadMainMods(): void {
 
 /* ----------------------------------------------------------- ui mod list */
 const UI_KIT = path.join(ROOT_DIR, "packages", "ui-kit", "dist", "index.js");
-const REACT_RUNTIME = path.join(ROOT_DIR, "packages", "react-runtime", "dist", "react-runtime.js");
 function listUiMods(): Usermod.UiModEntry[] {
   const runtime = path.join(__dirname, "ui-runtime.js");
   const entries: Usermod.UiModEntry[] = [{ name: "ui-runtime", file: runtime, url: pathToFileURL(runtime).href, builtin: true }];
   if (fs.existsSync(UI_KIT)) entries.push({ name: "ui-kit", file: UI_KIT, url: pathToFileURL(UI_KIT).href, builtin: true });
   else recordError("ui-kit", new Error(`not built: ${UI_KIT}`));
-  // Optional: React for mods written in TSX. Injected only when built, before any mod.
-  if (fs.existsSync(REACT_RUNTIME)) entries.push({ name: "react-runtime", file: REACT_RUNTIME, url: pathToFileURL(REACT_RUNTIME).href, builtin: true });
   for (const manifest of enabledManifests()) {
     if (!manifest.ui) continue;
     if (!fs.existsSync(manifest.ui)) {

@@ -1,11 +1,12 @@
 /*
  * Export report (UI): "Last export report…" in the MODS menu reads data/reports/latest.json through the
- * loader's read-file bridge and shows it. Toasts a one-line summary after each export.
+ * loader's read-file bridge and shows it (React, via the kit). Toasts a one-line summary after each export.
  */
 (function exportReportUi(): void {
   const rt = window.usermodRuntime;
   const ui = window.usermodUI;
-  rt.register({ name: "export-report", version: "0.1.0" });
+  const { KV, Row, Button } = ui.react;
+  rt.register({ name: "export-report", version: "0.2.0" });
 
   interface Report {
     file: string;
@@ -37,27 +38,38 @@
     }
   }
   const bounds = (b: [number, number] | null): string => (b ? `${b[0].toFixed(2)} … ${b[1].toFixed(2)}` : "—");
-  function show(rep: Report): void {
-    const modal = ui.modal(`Export report: ${rep.file}`, { width: 520 });
+
+  function ReportView({ rep, close }: { rep: Report; close(): void }): React.JSX.Element {
     const h = rep.header ?? {};
-    modal.body.append(
-      ui.kv([
-        ["Exported", new Date(rep.exportedAt).toLocaleString()],
-        ["Path", rep.path || "—"],
-        ["Size", `${rep.lines} lines, ${rt.formatBytes(rep.bytes)}`],
-        ["Tools", rep.tools.length ? rep.tools.map((t) => `T${t}`).join(", ") : "—"],
-        ["Tool changes", String(rep.toolChanges)],
-        ["Feed", rep.feed ? `${rep.feed[0]} – ${rep.feed[1]}` : "—"],
-        ["Spindle max", rep.spindleMax === null ? "—" : String(rep.spindleMax)],
-        ["X", bounds(rep.bounds.X)],
-        ["Y", bounds(rep.bounds.Y)],
-        ["Z", bounds(rep.bounds.Z)],
-        ["Program end", rep.programEnd ? "yes" : "missing"],
-        ["Relative moves", rep.relativeMoves ? "yes (bounds partial)" : "no"],
-        ["App header", h.machineModel || h.materialType ? `${String(h.machineModel ?? "?")} · ${String(h.materialType ?? "?")} · ${String(h.stockSize ?? "?")}` : "none"]
-      ]),
-      ui.buttonRow([ui.button("Open reports folder", () => void window.usermod.openModDir()), ui.button("Close", () => modal.close(), { primary: true })])
+    return (
+      <>
+        <KV
+          pairs={[
+            ["Exported", new Date(rep.exportedAt).toLocaleString()],
+            ["Path", rep.path || "—"],
+            ["Size", `${rep.lines} lines, ${rt.formatBytes(rep.bytes)}`],
+            ["Tools", rep.tools.length ? rep.tools.map((t) => `T${t}`).join(", ") : "—"],
+            ["Tool changes", String(rep.toolChanges)],
+            ["Feed", rep.feed ? `${rep.feed[0]} – ${rep.feed[1]}` : "—"],
+            ["Spindle max", rep.spindleMax === null ? "—" : String(rep.spindleMax)],
+            ["X", bounds(rep.bounds.X)],
+            ["Y", bounds(rep.bounds.Y)],
+            ["Z", bounds(rep.bounds.Z)],
+            ["Program end", rep.programEnd ? "yes" : "missing"],
+            ["Relative moves", rep.relativeMoves ? "yes (bounds partial)" : "no"],
+            ["App header", h.machineModel || h.materialType ? `${String(h.machineModel ?? "?")} · ${String(h.materialType ?? "?")} · ${String(h.stockSize ?? "?")}` : "none"]
+          ]}
+        />
+        <Row>
+          <Button label="Open reports folder" onClick={() => void window.usermod.openModDir()} />
+          <Button label="Close" primary onClick={close} />
+        </Row>
+      </>
     );
+  }
+  function show(rep: Report): void {
+    let modal: Usermod.ModalHandle | null = null;
+    modal = ui.react.modal(`Export report: ${rep.file}`, <ReportView rep={rep} close={() => modal?.close()} />, { width: 520 });
   }
 
   rt.menu.addAction({
