@@ -19,7 +19,8 @@ const ROOT_DIR = path.resolve(__dirname, "..", "..", "..");
 const MODS_DIR = path.join(ROOT_DIR, "mods");
 const DATA_DIR = path.join(ROOT_DIR, "data");
 const LOG_FILE = path.join(ROOT_DIR, "usermod.log");
-const CONFIG_FILE = path.join(ROOT_DIR, "mods.json");
+/** Per-machine config. USERMOD_CONFIG points it elsewhere so the test harness never touches the real one. */
+const CONFIG_FILE = process.env.USERMOD_CONFIG ? path.resolve(process.env.USERMOD_CONFIG) : path.join(ROOT_DIR, "mods.json");
 /** Tracked template; mods.json itself is per machine and git-ignored. */
 const CONFIG_DEFAULT_FILE = path.join(ROOT_DIR, "mods.default.json");
 const GCODE_EXT = /\.(nc|gcode|tap|ngc|cnc)$/i;
@@ -140,12 +141,30 @@ const pick = (o: Record<string, unknown>, map: Record<string, string>): Record<s
 const MIGRATIONS: Record<string, Migration> = {
   "keyboard-jog": { into: "jog", settings: (o, on) => ({ keyboardEnabled: on, ...pick(o, { feed: "keyboardFeed", zFeed: "keyboardZFeed", distance: "keyboardDistance", requireDeviceTab: "requireDeviceTab" }) }) },
   "gamepad-jog": { into: "jog", settings: (o) => pick(o, { maxFeed: "gamepadMaxFeed", zFeed: "gamepadZFeed", deadzone: "deadzone", invertY: "invertY", stepMs: "stepMs", requireDeviceTab: "requireDeviceTab" }) },
-  "depth-guard": { into: "export-report", settings: (o) => ({ ...o }) },
+  "depth-guard": { into: "export", settings: (o) => ({ ...o }) },
   "dev-shortcuts": { into: "app-tools", settings: (o) => ({ shortcuts: true, reloadShortcut: o.reload !== false }) },
   "strip-comments": { into: "gcode-format", settings: (o, on) => ({ stripComments: on, ...pick(o, { keepHeader: "keepHeader", removeBlankLines: "removeBlankLines" }) }) },
   "line-numbers": { into: "gcode-format", settings: (o, on) => ({ lineNumbers: on, ...pick(o, { start: "start", step: "step", skipComments: "skipComments" }) }) },
   "job-notifier": { into: "jobs", settings: (o) => ({ ...o }) },
-  "job-history": { into: "jobs", settings: (o) => ({ ...o }) }
+  "job-history": { into: "jobs", settings: (o) => ({ ...o }) },
+  "feed-override": { into: "feed-scale", settings: (o) => ({ ...o }) },
+  "live-override": { into: "overrides", settings: (o) => ({ ...o }) },
+  "tool-visual": { into: "cutter", settings: (o) => ({ ...o }) },
+  "camera-timelapse": { into: "timelapse", settings: (o) => ({ ...o }) },
+  "tool-change-guard": { into: "tool-change", settings: (o) => ({ ...o }) },
+  "tool-change-assistant": { into: "tool-change", settings: (o) => ({ ...o }) },
+  "export-report": { into: "export", settings: (o) => ({ ...o }) },
+  "export-copy": { into: "export", settings: (o) => pick(o, { targetDir: "copyTo", subfolderByDate: "copySubfolderByDate", overwrite: "copyOverwrite" }) },
+  "export-filename": { into: "export", settings: (o) => pick(o, { template: "template", targetDir: "saveDir" }) },
+  "tool-library": { into: "tools", settings: (o) => ({ ...o }) },
+  "feeds-speeds": { into: "tools", settings: (o) => ({ ...o }) },
+  "work-offsets": { into: "work-zero", settings: (o) => ({ ...o }) },
+  "z-probe": { into: "work-zero", settings: (o) => ({ ...o }) },
+  "iso-view": { into: "view", settings: (o) => ({ ...o }) },
+  "toolpath-color": { into: "view", settings: (o) => ({ ...o }) },
+  "dark-mode": { into: "appearance", settings: (o) => ({ ...o }) },
+  "ui-scale": { into: "appearance", settings: (o) => ({ ...o }) },
+  "status-hud": { into: "jobs", settings: (o) => ({ hud: true, ...pick(o, { position: "hudPosition", showWhenDisconnected: "hudWhenDisconnected" }) }) }
 };
 function migrateConfig(config: Usermod.Config, rawFile: Record<string, unknown>): Usermod.Config {
   let changed = false;
@@ -657,6 +676,30 @@ function registerLoaderIpc(): void {
     return getInfo();
   });
   define("open-mod-dir", () => shell.openPath(ROOT_DIR));
+  /* Bed size: the renderer needs this before the app's own chunks evaluate, so the preload asks synchronously
+   * (ipcMain.on + event.returnValue). Off unless the bed-size mod is enabled and its override is on. */
+  ipcMain.on("usermod:bed-sync", (event: { returnValue?: unknown }) => {
+    let payload: Usermod.BedOverride = { enabled: false, limits: { X: { min: -238, max: 0 }, Y: { min: -200, max: 0 }, Z: { min: -123, max: 0 } }, platform: 225 };
+    try {
+      const mod = state.manifests.find((m) => m.name === "bed-size");
+      const s = settingsFor("bed-size");
+      const axis = (key: string, fallback: number): Usermod.BedAxis => {
+        const travel = Number(s[key]);
+        return { min: -(Number.isFinite(travel) && travel > 0 ? travel : fallback), max: 0 };
+      };
+      const platform = Number(s.platform);
+      if (mod && isEnabled(mod) && s.enabled !== false) {
+        payload = {
+          enabled: true,
+          limits: { X: axis("travelX", 238), Y: axis("travelY", 200), Z: axis("travelZ", 123) },
+          platform: Number.isFinite(platform) && platform > 0 ? platform : 225
+        };
+      }
+    } catch (error) {
+      recordError("bed-sync", error);
+    }
+    event.returnValue = payload;
+  });
   define("relaunch", () => {
     log("info", "relaunch requested from the MODS menu");
     app.relaunch();
@@ -689,4 +732,4 @@ try {
   recordError("startup", error);
 }
 
-export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR };
+export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR, CONFIG_FILE };

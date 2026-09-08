@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/overrides",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Live feed, rapid and spindle override controls (GRBL realtime override commands) in the app bar",
+  "usermod": {
+    "name": "overrides",
+    "ui": "dist/index.js",
+    "order": 42,
+    "description": "Live feed, rapid and spindle override controls (GRBL realtime override commands) in the app bar"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

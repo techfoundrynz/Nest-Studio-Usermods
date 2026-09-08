@@ -76,6 +76,20 @@ declare namespace Usermod {
     buildFlags?: { appVersion?: string; installedAt?: string; flags: Record<string, boolean> };
   }
 
+  /** Machine envelope the renderer should believe, handed to the preload synchronously before app code runs. */
+  interface BedAxis {
+    min: number;
+    max: number;
+  }
+  interface BedOverride {
+    /** False when the bed-size mod is off or its override is disabled: the app keeps its built-in limits. */
+    enabled: boolean;
+    /** Machine-coordinate travel per axis (min is negative, max is 0), the shape the app's own constant uses. */
+    limits: { X: BedAxis; Y: BedAxis; Z: BedAxis };
+    /** Size of the 3D work platform / grid in mm (read once when the 3D engine loads). */
+    platform: number;
+  }
+
   /** Context a caller may supply when running the chain manually. */
   interface RunContextInput {
     fileName?: string;
@@ -203,8 +217,6 @@ declare namespace Usermod {
     /** Left-to-right order among usermod toolbar buttons (default 100); also decides what overflows. */
     order?: number;
     ariaLabel?: string;
-    /** Right-click / long-press action, usually the mod's settings. Mention it in `title` so it is discoverable. */
-    onContextMenu?(button: HTMLButtonElement): void | Promise<void>;
     /** Keep this button out of the overflow menu (mods-menu pins itself). */
     pinned?: boolean;
   }
@@ -290,7 +302,10 @@ declare namespace Usermod {
       /** Icons shown in the app bar before the rest collapse into the ellipsis menu (default 5, minimum 2). */
       setMaxVisible(count: number): void;
       maxVisible(): number;
-      /** Button ids that keep an app-bar slot whatever their order (the user's choice, from mods-menu settings). */
+      /** Button ids in the order the user arranged them (mods-menu settings); unlisted buttons follow by `order`. */
+      setOrder(ids: string[]): void;
+      order(): string[];
+      /** Button ids that keep an app-bar slot whatever their order. Mods may also pass `pinned` when adding. */
       setPinned(ids: string[]): void;
       pinned(): string[];
       /** Every registered button, in bar order, with whether it is currently visible or in the overflow menu. */

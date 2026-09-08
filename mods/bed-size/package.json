@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/bed-size",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Tells the app how much travel the machine really has, instead of the built-in 238 x 200 x 123 mm envelope",
+  "usermod": {
+    "name": "bed-size",
+    "ui": "dist/index.js",
+    "order": 24,
+    "description": "Tells the app how much travel the machine really has, instead of the built-in 238 x 200 x 123 mm envelope"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

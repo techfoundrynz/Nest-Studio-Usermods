@@ -11,40 +11,37 @@
       "path": "./mods/app-tools/tsconfig.ui.json"
     },
     {
+      "path": "./mods/appearance/tsconfig.main.json"
+    },
+    {
+      "path": "./mods/appearance/tsconfig.ui.json"
+    },
+    {
       "path": "./mods/arc-fit/tsconfig.json"
     },
     {
-      "path": "./mods/camera-timelapse/tsconfig.json"
+      "path": "./mods/bed-size/tsconfig.json"
+    },
+    {
+      "path": "./mods/cutter/tsconfig.json"
     },
     {
       "path": "./mods/cycles/tsconfig.json"
     },
     {
-      "path": "./mods/dark-mode/tsconfig.json"
-    },
-    {
       "path": "./mods/device-macros/tsconfig.json"
     },
     {
-      "path": "./mods/export-copy/tsconfig.json"
+      "path": "./mods/export/tsconfig.json"
     },
     {
-      "path": "./mods/export-filename/tsconfig.json"
+      "path": "./mods/export/tsconfig.main.json"
     },
     {
-      "path": "./mods/export-report/tsconfig.json"
+      "path": "./mods/export/tsconfig.ui.json"
     },
     {
-      "path": "./mods/export-report/tsconfig.main.json"
-    },
-    {
-      "path": "./mods/export-report/tsconfig.ui.json"
-    },
-    {
-      "path": "./mods/feed-override/tsconfig.json"
-    },
-    {
-      "path": "./mods/feeds-speeds/tsconfig.json"
+      "path": "./mods/feed-scale/tsconfig.json"
     },
     {
       "path": "./mods/final-geometry/tsconfig.main.json"
@@ -57,9 +54,6 @@
     },
     {
       "path": "./mods/gcode-lab/tsconfig.json"
-    },
-    {
-      "path": "./mods/iso-view/tsconfig.json"
     },
     {
       "path": "./mods/jobs/tsconfig.main.json"
@@ -77,13 +71,13 @@
       "path": "./mods/lan-monitor/tsconfig.ui.json"
     },
     {
-      "path": "./mods/live-override/tsconfig.json"
-    },
-    {
       "path": "./mods/machine-state/tsconfig.json"
     },
     {
       "path": "./mods/mods-menu/tsconfig.json"
+    },
+    {
+      "path": "./mods/overrides/tsconfig.json"
     },
     {
       "path": "./mods/peck-drill/tsconfig.json"
@@ -98,25 +92,19 @@
       "path": "./mods/safe-shutdown/tsconfig.json"
     },
     {
-      "path": "./mods/status-hud/tsconfig.json"
+      "path": "./mods/timelapse/tsconfig.json"
     },
     {
-      "path": "./mods/tool-change-assistant/tsconfig.json"
+      "path": "./mods/tool-change/tsconfig.json"
     },
     {
-      "path": "./mods/tool-change-guard/tsconfig.json"
+      "path": "./mods/tool-change/tsconfig.main.json"
     },
     {
-      "path": "./mods/tool-library/tsconfig.json"
+      "path": "./mods/tool-change/tsconfig.ui.json"
     },
     {
       "path": "./mods/tool-split/tsconfig.json"
-    },
-    {
-      "path": "./mods/tool-visual/tsconfig.json"
-    },
-    {
-      "path": "./mods/toolpath-color/tsconfig.json"
     },
     {
       "path": "./mods/toolpath-modifiers/tsconfig.main.json"
@@ -125,19 +113,13 @@
       "path": "./mods/toolpath-modifiers/tsconfig.ui.json"
     },
     {
-      "path": "./mods/ui-scale/tsconfig.json"
+      "path": "./mods/tools/tsconfig.json"
     },
     {
-      "path": "./mods/ui-scale/tsconfig.main.json"
+      "path": "./mods/view/tsconfig.json"
     },
     {
-      "path": "./mods/ui-scale/tsconfig.ui.json"
-    },
-    {
-      "path": "./mods/work-offsets/tsconfig.json"
-    },
-    {
-      "path": "./mods/z-probe/tsconfig.json"
+      "path": "./mods/work-zero/tsconfig.json"
     },
     {
       "path": "./packages/asar/tsconfig.json"

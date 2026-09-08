@@ -276,7 +276,7 @@
 
   ui.toolbar.addButton({
     id: "gcode-lab",
-    title: "G-code Lab: inspect, validate and post-process any file",
+    title: "G-code lab",
     icon: () => ui.icons.svg("M9 2h6v2h-1v3.4l4.7 9.3A3 3 0 0 1 16 21H8a3 3 0 0 1-2.7-4.3L10 7.4V4H9V2zm3 7.9-3.2 6.4h6.4L12 9.9z"),
     order: 30,
     onClick: () => {

@@ -68,7 +68,7 @@
   }
   ui.toolbar.addButton({
     id: "lan-monitor",
-    title: "LAN monitor: status page for phones on the network",
+    title: "Status monitor page",
     icon: () => ui.icons.svg("M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v9h16V6H4z"),
     order: 62,
     onClick: () => {

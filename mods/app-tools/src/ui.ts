@@ -63,13 +63,15 @@
           if (!r.enabled) rt.toast(r.reason ?? "DevTools unavailable", { kind: "warn", duration: 6000 });
         }
       },
-      { label: "Reload the UI", hint: "Ctrl+Shift+R", onClick: () => {
-        rt.toast("Reloading renderer…");
-        setTimeout(() => window.location.reload(), 250);
-      } }
+      {
+        label: "Reload the UI", hint: "Ctrl+Shift+R", onClick: () => {
+          rt.toast("Reloading renderer…");
+          setTimeout(() => window.location.reload(), 250);
+        }
+      }
     ]);
   }
-  ui.toolbar.addButton({ id: "app-tools", title: "App tools: folders, CAM service, developer", icon: () => ui.icons.svg("M9 3h6a1 1 0 0 1 1 1v2h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3V4a1 1 0 0 1 1-1zm1 3h4V5h-4v1zM5 8v10h14V8h-3v2h-2V8h-4v2H8V8H5z"), order: 20, onClick: openMenu });
+  ui.toolbar.addButton({ id: "app-tools", title: "App tools", icon: () => ui.icons.svg("M9 3h6a1 1 0 0 1 1 1v2h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3V4a1 1 0 0 1 1-1zm1 3h4V5h-4v1zM5 8v10h14V8h-3v2h-2V8h-4v2H8V8H5z"), order: 20, onClick: openMenu });
 
   /* ---------------------------------------------------------- shortcuts */
   let shortcuts = { enabled: true, reload: true };

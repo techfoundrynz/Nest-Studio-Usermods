@@ -640,6 +640,6 @@
   function open(tab: Tab = "thread"): void {
     ui.react.modal("Cycles", <Dialog initialTab={tab} />, { width: 900 });
   }
-  ui.toolbar.addButton({ id: "cycles", title: "Cycles: thread milling, helical holes, surfacing", icon: () => ui.icons.svg("M9 2h6v3H9V2zm0 5h6v3H9V7zm0 5h6v3H9v-3zm0 5h6v2l-3 3-3-3v-2z"), order: 15, onClick: () => open() });
+  ui.toolbar.addButton({ id: "cycles", title: "Cycles", icon: () => ui.icons.svg("M9 2h6v3H9V2zm0 5h6v3H9V7zm0 5h6v3H9v-3zm0 5h6v2l-3 3-3-3v-2z"), order: 15, onClick: () => open() });
   window.usermodCycles = { open };
 })();

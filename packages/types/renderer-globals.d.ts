@@ -12,10 +12,14 @@ interface Window {
   usermodMenu?: { toggle(): Promise<void>; close(): void };
   usermodGcodeLab?: { open(): () => void };
   usermodDarkMode?: { setTheme(theme: NestStudio.Theme): Promise<void>; toggle(): Promise<void>; current(): NestStudio.Theme };
-  /** z-probe mod: run the Z touch-plate cycle from other mods (tool-change-assistant offers it). */
+  /** work-zero mod: run the Z touch-plate cycle from other mods (tool-change offers it at a hold). */
   usermodZProbe?: { run(): Promise<void>; enabled(): boolean };
   /** cycles mod: open the generator dialog on a given tab. */
   usermodCycles?: { open(tab?: "thread" | "hole" | "surface"): void };
+  /** Merged mods that open a tabbed window: tools (library / feeds), work-zero (offsets / probe), view. */
+  usermodTools?: { open(tab?: string): void };
+  usermodWorkZero?: { open(tab?: string): void };
+  usermodView?: { open(tab?: string): void };
 }
 
 /* Minimal view of the app's three.js scene managers, exposed by the installer's scene patch
@@ -118,6 +122,9 @@ interface UsermodSceneManagerLike {
   requestRender(): void;
 }
 declare var __usermodSceneManagers: Set<UsermodSceneManagerLike> | undefined;
+/** Bed size override, set by the loader's preload before the app's chunks evaluate (installer --bed-size). */
+declare var __usermodBed: { X: Usermod.BedAxis; Y: Usermod.BedAxis; Z: Usermod.BedAxis } | undefined;
+declare var __usermodBedPlatform: number | undefined;
 
 /* The preview's toolpath simulation runtime (EditorToolpathSimulationRuntime), exposed by the installer's
  * second scene patch. It owns the visible cutter and receives the per-path tool metadata. */
@@ -205,6 +212,8 @@ declare var __usermodSimRuntimes: Set<UsermodSimRuntimeLike> | undefined;
 interface PreloadIpcRenderer {
   /** Electron's invoke resolves with whatever main returned; callers name the expected type. */
   invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T>;
+  /** Blocking round trip, used once at preload time so the bed override is set before the app's code runs. */
+  sendSync<T = unknown>(channel: string, ...args: unknown[]): T;
   on<T = unknown>(channel: string, listener: (event: unknown, payload: T) => void): void;
   removeListener<T = unknown>(channel: string, listener: (event: unknown, payload: T) => void): void;
 }

@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/tool-change",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Tool changes end to end: a safe retract with spindle and coolant off before every change, and a dialog naming the new tool with Resume when the machine holds",
+  "usermod": {
+    "name": "tool-change",
+    "postprocessor": "dist/post.js",
+    "ui": "dist/ui.js",
+    "order": 18,
+    "description": "Tool changes end to end: a safe retract with spindle and coolant off before every change, and a dialog naming the new tool with Resume when the machine holds"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}

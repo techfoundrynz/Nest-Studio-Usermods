@@ -84,6 +84,8 @@ const toolbarEntries = new Map<string, ToolbarEntry>();
 /** Usermod icons in the app bar, ellipsis included, before the rest collapse into it. */
 let maxVisible = 5;
 let pinnedIds = new Set<string>();
+/** The user's arrangement (mods-menu ▸ Enable/disable mods ▸ Toolbar); ids not listed keep their mod's own `order`. */
+let orderIds: string[] = [];
 let overflowButton: HTMLButtonElement | null = null;
 const isPinned = (entry: ToolbarEntry): boolean => entry.options.pinned === true || pinnedIds.has(entry.options.id);
 
@@ -99,12 +101,7 @@ function buildButton(entry: ToolbarEntry, className: string): HTMLButtonElement 
     "aria-label": entry.options.ariaLabel ?? entry.options.title,
     "data-usermod-button": entry.options.id,
     "data-badge": entry.badge ? "true" : "false",
-    onClick: () => runButton(entry, button),
-    onContextmenu: (event: MouseEvent) => {
-      if (!entry.options.onContextMenu) return;
-      event.preventDefault();
-      Promise.resolve(entry.options.onContextMenu(button)).catch((error: unknown) => rt.toast(`${entry.options.title}: ${message(error)}`, { kind: "error" }));
-    }
+    onClick: () => runButton(entry, button)
   });
   button.appendChild(iconNode(entry.options.icon));
   entry.button = button;
@@ -135,6 +132,7 @@ function openOverflowMenu(): void {
   if (!anchor) return;
   const items: Usermod.MenuEntry[] = [];
   const hidden = orderedEntries().filter((entry) => entry.button === null);
+  // One row per hidden mod, running exactly what its button runs.
   for (const entry of hidden) {
     items.push({
       label: entry.options.title,
@@ -160,8 +158,13 @@ function openOverflowMenu(): void {
   if (!items.length) items.push({ label: "No other mod UI", onClick: () => undefined, disabled: true });
   menu(anchor, items, { width: 280 });
 }
+/** User arrangement first (in its own order), then anything unlisted by the order its mod asked for. */
+const userIndex = (entry: ToolbarEntry): number => {
+  const at = orderIds.indexOf(entry.options.id);
+  return at < 0 ? Number.MAX_SAFE_INTEGER : at;
+};
 const orderedEntries = (): ToolbarEntry[] =>
-  [...toolbarEntries.values()].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || a.order - b.order || a.options.id.localeCompare(b.options.id));
+  [...toolbarEntries.values()].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)) || userIndex(a) - userIndex(b) || a.order - b.order || a.options.id.localeCompare(b.options.id));
 
 function mountToolbar(): void {
   const settings = document.querySelector<HTMLButtonElement>(SETTINGS_SELECTOR);
@@ -249,6 +252,13 @@ export const toolbar: Usermod.UI["toolbar"] = {
   },
   maxVisible() {
     return maxVisible;
+  },
+  setOrder(ids) {
+    orderIds = ids.filter((id) => typeof id === "string");
+    mountToolbar();
+  },
+  order() {
+    return [...orderIds];
   },
   setPinned(ids) {
     pinnedIds = new Set(ids.filter((id) => typeof id === "string"));

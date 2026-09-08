@@ -1,0 +1,25 @@
+{
+  "name": "@neststudio-mods/export",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Everything around exporting a program: the save dialog's name and folder, a stats report with depth and envelope checks, and an extra copy to a folder of your choice",
+  "usermod": {
+    "name": "export",
+    "postprocessor": "dist/post.js",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 950,
+    "description": "Everything around exporting a program: the save dialog's name and folder, a stats report with depth and envelope checks, and an extra copy to a folder of your choice"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

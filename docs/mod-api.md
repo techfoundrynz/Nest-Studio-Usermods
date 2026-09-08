@@ -29,12 +29,12 @@ Any combination of `postprocessor`, `main` and `ui` entries is allowed. `order` 
 (execution order) and UI mods (injection order); lower runs first, default 100. `core: true` marks a mod
 that always loads and cannot be switched off (only `mods-menu`).
 
-`reload` (`"none" | "ui" | "app"`) tells the Mods… dialog what must happen after the mod is switched on
+`reload` (`"none" | "ui" | "app"`) tells the Enable/disable mods window what must happen after the mod is switched on
 or off. Leave it out and it is derived: `postprocessor` → `none` (applies at once), `ui` → `ui` (the dialog
 reloads the renderer automatically on Save), `main` → `app` when switching off (main mods cannot unload;
 the dialog offers a restart, after checking for unsaved projects) and immediate activation when switching
 on. Declare it only to override, e.g. `"reload": "app"` for a UI mod that patches something it cannot undo. Mods are opt-in: the loader loads those
-named in `mods.json` `enabled`, which the in-app Mods… dialog (or the installer's CLI fallback) writes.
+named in `mods.json` `enabled`, which the in-app Enable/disable mods window (or the installer's CLI fallback) writes.
 Settings live in `mods.json` under `settings.<name>`.
 
 ## Post-processors (main process)
@@ -95,8 +95,8 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 
 | Member | Purpose |
 | --- | --- |
-| `toolbar.addButton({ id, title, icon, onClick, order, onContextMenu, pinned })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove`. `onContextMenu` is the right-click action (usually settings; say so in `title`) |
-| `toolbar.setMaxVisible(n)` / `maxVisible()` / `setPinned(ids)` / `pinned()` / `entries()` | how many icons stay in the bar (default 5) and which mods keep a slot; `entries()` reports what is visible |
+| `toolbar.addButton({ id, title, icon, onClick, order, pinned })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove` |
+| `toolbar.setMaxVisible(n)` / `maxVisible()` / `setOrder(ids)` / `order()` / `setPinned(ids)` / `entries()` | how many icons stay in the bar (default 5) and in what order; `entries()` reports position and visibility |
 | `menu(anchor, items, { width, align })` | popover of clickable rows (`{ label, onClick, icon, title, hint, disabled }`, or `{ heading }` to group); the toolbar's overflow menu is one of these |
 | `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
 | `modal(title, { width, onClose })` | centred dialog (`{ root, body, close, isOpen }`) |
@@ -108,13 +108,16 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 
 Styles key off the app's `html[data-theme]`, so kit UI follows the app's light/dark theme.
 
-**One icon per mod.** Every bundled mod with UI registers exactly one toolbar button. A mod with several
-actions (app-tools) opens `ui.menu` from its button; a mod whose click is a direct action (dark-mode,
-iso-view) puts its settings on `onContextMenu`. The bar shows at most `toolbar.maxVisible()` usermod icons
+**One icon per mod.** Every bundled mod with UI registers exactly one toolbar button, and that button either
+opens the mod's UI or performs its action, never both. A mod with several actions (app-tools) opens `ui.menu`
+from its button; a mod with several panels (tools, work-zero, view) opens a window with a tab per panel. The
+bar shows at most `toolbar.maxVisible()` usermod icons
 (default 5, from `mods.json` `settings.mods-menu.toolbarMaxVisible`) and collapses the rest into an ellipsis
 button whose menu lists the hidden mods plus any legacy `rt.menu.addAction` entries.
-`settings.mods-menu.toolbarPinned`, edited in the MODS panel, keeps chosen mods in the bar whatever their
-`order`; mods-menu pins itself first.
+`settings.mods-menu.toolbarOrder` is the user's arrangement (edited in MODS ▸ Enable/disable mods ▸ Toolbar):
+listed ids come first in that order, the rest follow by their own `order`, and the top of the list is what stays
+in the bar. mods-menu pins itself first with `pinned: true`. Each mod gets exactly one row in the overflow menu, running exactly what its
+button runs: a mod either opens its UI or performs its action, never both.
 
 ```ts
 const ui = window.usermodUI;
@@ -141,10 +144,10 @@ Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: fa
 paths only; goes through the post-processor hook), `shell.openExternal(url)` (allow-listed hosts only).
 
 The CSP allows scripts from `file:` and network access to the CAM service only. Bundled UI mods:
-`mods-menu`, `dark-mode`, `gcode-lab`, `app-tools` (which also carries the developer shortcuts).
+`mods-menu`, `appearance`, `gcode-lab`, `app-tools` (which also carries the developer shortcuts).
 
 Theme note: Nest Studio applies `data-theme="light|dark"` on `<html>` from `app.theme` in the user
-store and ships full token sets for both. `dark-mode` switches it by writing the store through
+store and ships full token sets for both. `appearance` switches it by writing the store through
 `window.api.store.write` and reloading the renderer.
 
 ## React UI mods (TSX)
@@ -196,9 +199,9 @@ function Panel(): React.JSX.Element {
 ui.toolbar.addButton({ id: "x", title: "Machine panel", icon: () => ui.icons.svg("M4 4h16v12H4z"), order: 50, onClick: () => ui.react.modal("Machine", <Panel />, { width: 420 }) });
 ```
 
-References: `mods/mods-menu` (menu panel + Mods… dialog), `mods/gcode-lab` (drop zone, async actions),
-`mods/device-macros` (popover + editor form), `mods/jobs` and `mods/export-report` (panels with settings forms).
-Small DOM-patching mods (dark-mode, iso-view, status-hud, tool-visual) stay imperative on purpose.
+References: `mods/mods-menu` (status panel + the Enable/disable mods window), `mods/gcode-lab` (drop zone, async actions),
+`mods/device-macros` (popover + editor form), `mods/jobs` and `mods/export` (panels with settings forms).
+Some mods stay imperative on purpose: `appearance`'s compact-density CSS, `view`'s camera work and `jobs`'s status pill patch the app's own DOM.
 
 ## Main mods (main process)
 
@@ -227,7 +230,7 @@ machine, and `gcode-exported` `{ filePath, fileName, lines, bytes, internal }` a
 
 `api.intercept(channel, { before?(args), after?(result, args) })` hooks any of the app's own IPC invoke
 channels. `before` may return replacement arguments, `after` a replacement result; errors are logged and
-skipped. Examples in the bundled mods: `export-filename` rewrites `dialog:show-save` options,
+skipped. Examples in the bundled mods: `export` rewrites `dialog:show-save` options,
 `project-backup` watches `store:write-binary-file` and the chunked `store:begin/finish-binary-file-write`.
 Channel names come from the app's preload (`out/preload/index.js`); the loader's `usermod.log` and the
 IPC inspector idea in the README are the way to discover more.
@@ -241,11 +244,19 @@ subscribes for React components.
 
 Machine dialect notes (Nest Studio 1.1): the app sends realtime commands spelled out as text (`"0x85"` for
 jog cancel), zeroes with `G10 L20 P<G-53> …` where `G` is the active WCS from the status frame, homes with
-`$H`, and jogs with `$J=G21G91…F…`. Status frames carry `MPos`, `WPos`, `FS`, `Ln`, `G`, `T` and machine
+`$H`, and jogs with `$J=G21G91…F…`. Feed and spindle overrides are **absolute percentages**, not GRBL's
+relative bytes: feed `0xC0` (0%) to `0xCF` (150%) and spindle `0xD0` (50%) to `0xD7` (120%), in steps of 10
+(see `mods/overrides`). Status frames carry `MPos`, `WPos`, `FS`, `Ln`, `G`, `T` and machine
 specific `MS` flags.
 
+Machine envelope: the renderer hard-codes X 238 mm, Y 200 mm, Z 123 mm of travel and a 225 mm work platform.
+With the installer's `--bed-size` option those constants read `globalThis.__usermodBed` / `__usermodBedPlatform`
+instead, which the loader's preload fills in synchronously (`ipcMain.on("usermod:bed-sync")`, so the values are
+there before the app's chunks evaluate) from the `bed-size` mod's settings. Travel limits are re-read on every
+check; the work-platform size is read once, so it needs a UI reload.
+
 3D scene access: the installer exposes the app's three.js `SceneManager` instances as
-`globalThis.__usermodSceneManagers` (typed minimally as `UsermodSceneManagerLike`); `mods/iso-view` shows
+`globalThis.__usermodSceneManagers` (typed minimally as `UsermodSceneManagerLike`); `mods/view` shows
 how to drive the app's `CameraController` (target, distance, orientation quaternion) safely. To observe what
 the app streams to its renderer (machine status, console lines), wrap `webContents.send` from
 `app.on("web-contents-created")` as `mods/machine-state` does (and then prefer `api.events.on("machine-state")`
@@ -256,8 +267,11 @@ Bundled: `app-tools` (`tools:ping`, `tools:open-logs`, `tools:open-userdata`, `t
 `tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`) and `jobs` (`jobs:status`,
 `jobs:test`, `jobs:reload-settings`, `jobs:list`, `jobs:clear`, `jobs:export-csv`, `jobs:open`; emits
 `jobs:event` and `jobs:changed` to the UI). Mods that were merged (keyboard-jog + gamepad-jog into jog,
-depth-guard into export-report, dev-shortcuts into app-tools, strip-comments + line-numbers into gcode-format,
-job-notifier + job-history into jobs) are migrated from an old mods.json automatically: the old name enables
+depth-guard + export-copy + export-filename + export-report into export, dev-shortcuts into app-tools,
+strip-comments + line-numbers into gcode-format, job-notifier + job-history + status-hud into jobs, dark-mode +
+ui-scale into appearance, iso-view + toolpath-color into view, work-offsets + z-probe into work-zero,
+tool-library + feeds-speeds into tools, tool-change-guard + tool-change-assistant into tool-change, and the
+renames feed-override to feed-scale, live-override to overrides, tool-visual to cutter, camera-timelapse to timelapse) are migrated from an old mods.json automatically: the old name enables
 the new mod and its settings are carried over.
 
 ## Loader internals

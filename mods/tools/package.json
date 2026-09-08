@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/tools",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Tools: library and feeds & speeds",
+  "usermod": {
+    "name": "tools",
+    "ui": "dist/index.js",
+    "order": 36,
+    "description": "Tools: library and feeds & speeds"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

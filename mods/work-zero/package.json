@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/work-zero",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Work zero: offsets and probing",
+  "usermod": {
+    "name": "work-zero",
+    "ui": "dist/index.js",
+    "order": 43,
+    "description": "Work zero: offsets and probing"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

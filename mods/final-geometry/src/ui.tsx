@@ -461,7 +461,7 @@
 
   ui.toolbar.addButton({
     id: "final-geometry",
-    title: "Final geometry (machined result vs model)",
+    title: "Final geometry preview",
     icon: () => ui.icons.svg("M12 2 3 6.5v11L12 22l9-4.5v-11L12 2zm0 2.2 6.6 3.3L12 10.8 5.4 7.5 12 4.2zM5 9.1l6 3v7.4l-6-3V9.1zm14 0v7.4l-6 3v-7.4l6-3zM16.5 12.2l-2.3 2.6-1-1-.9.9 1.9 1.9 3.2-3.5-.9-.9z"),
     order: 49,
     onClick: (button) => {

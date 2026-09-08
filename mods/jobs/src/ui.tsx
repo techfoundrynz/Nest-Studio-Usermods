@@ -156,7 +156,10 @@
             { key: "settleSeconds", label: "Idle time before a job counts as finished (seconds)", type: "number", min: 1, step: 1 },
             { key: "webhookUrl", label: "Webhook URL (POST JSON, optional)", type: "string", nullable: false, placeholder: "https://…" },
             { key: "silent", label: "Silent notifications (no sound)", type: "boolean" },
-            { key: "keep", label: "History records to keep", type: "number", min: 10, step: 50 }
+            { key: "keep", label: "History records to keep", type: "number", min: 10, step: 50 },
+            { key: "hud", label: "Show the status pill on screen", type: "boolean" },
+            { key: "hudPosition", label: "Pill position", type: "select", options: [{ label: "Bottom left", value: "bottom-left" }, { label: "Bottom right", value: "bottom-right" }, { label: "Top right", value: "top-right" }] },
+            { key: "hudWhenDisconnected", label: "Show the pill while disconnected", type: "boolean" }
           ]}
           onSaved={() => call("jobs:reload-settings")}
         />
@@ -164,13 +167,64 @@
     );
   }
 
+  const openJobs = (): void => void ui.react.modal("Jobs", <Panel />, { width: 820 });
   ui.toolbar.addButton({
     id: "jobs",
-    title: "Jobs: run history and notifications",
+    title: "Job information",
     icon: () => ui.icons.svg("M9 2h6v2h3a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3V2zm2 2v1h2V4h-2zM7 6v14h10V6h-1.5v1.5h-7V6H7zm1.5 5H16v1.5H8.5V11zm0 4H16v1.5H8.5V15z"),
     order: 30,
-    onClick: () => {
-      ui.react.modal("Jobs", <Panel />, { width: 820 });
-    }
+    onClick: openJobs
   });
+
+  /* The status pill (was the status-hud mod): an always-visible summary that opens this window when clicked. */
+  (function statusPill(): void {
+      let settings = { enabled: true, position: "bottom-left", showWhenDisconnected: true };
+      let last: Usermod.MachineState | null = null;
+
+      rt.addStyle(
+        `#usermod-hud{position:fixed;z-index:2147482500;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(24,24,24,.88);color:#fff;font:12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer;user-select:none;backdrop-filter:blur(4px)}
+         #usermod-hud[data-pos="bottom-left"]{left:16px;bottom:16px}#usermod-hud[data-pos="bottom-right"]{right:16px;bottom:16px}#usermod-hud[data-pos="top-right"]{right:120px;top:52px}
+         #usermod-hud .dot{width:8px;height:8px;border-radius:50%;background:#9e9e9e;flex:none}
+         #usermod-hud[data-phase="running"] .dot{background:#22c55e;box-shadow:0 0 6px #22c55e}#usermod-hud[data-phase="paused"] .dot{background:#f59e0b}#usermod-hud[data-phase="alarm"] .dot{background:#ef4444}
+         #usermod-hud .bar{width:90px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);overflow:hidden}#usermod-hud .bar i{display:block;height:100%;background:#22c55e;width:0}
+         #usermod-hud .muted{opacity:.7}`,
+        "status-hud"
+      );
+      const dot = rt.el("span", { class: "dot" });
+      const text = rt.el("span");
+      const fill = rt.el("i");
+      const bar = rt.el("span", { class: "bar" }, [fill]);
+      const eta = rt.el("span", { class: "muted" });
+      const hud = rt.el("div", { id: "usermod-hud", "data-pos": settings.position, "data-phase": "disconnected", title: "Machine status (click for the jobs window)", onClick: () => openJobs() }, [dot, text, bar, eta]);
+      hud.hidden = true;
+      document.body.appendChild(hud);
+
+      const fmt = (s: number | null): string => (s === null ? "" : rt.formatDuration(s));
+      const capitalise = (text: string): string => (text ? text[0]!.toUpperCase() + text.slice(1) : text);
+      function render(s: Usermod.MachineState): void {
+        last = s;
+        hud.dataset.pos = settings.position;
+        hud.dataset.phase = s.phase;
+        const visible = settings.enabled && (s.connected || settings.showWhenDisconnected);
+        hud.hidden = !visible;
+        if (!visible) return;
+        const name = s.job.fileName ?? "";
+        const pct = s.progress !== null ? `${Math.round(s.progress * 100)}%` : "";
+        // Always name the machine state: an empty pill looks like the mod is broken.
+        const state = s.phase === "alarm" ? `Alarm ${s.alarm ?? ""}`.trim() : s.phase === "disconnected" ? "No machine" : capitalise(s.status ?? s.phase) || "No machine data";
+        text.textContent = `${state}${name ? ` · ${name}` : ""}${pct ? ` · ${pct}` : ""}`;
+        bar.hidden = s.progress === null;
+        fill.style.width = `${Math.round((s.progress ?? 0) * 100)}%`;
+        eta.textContent = s.phase === "running" && s.etaSeconds ? `${fmt(s.etaSeconds)} left` : s.phase !== "idle" && s.elapsedSeconds ? fmt(s.elapsedSeconds) : "";
+      }
+      void window.usermod.info().then((r) => {
+        if (r.ok) {
+          const mine = r.data.config.settings["jobs"] ?? {};
+          settings = { enabled: mine.hud !== false, position: String(mine.hudPosition ?? "bottom-left"), showWhenDisconnected: mine.hudWhenDisconnected !== false };
+        }
+        return window.usermod.invoke<Usermod.MachineState>("machine:state").then((s) => s.ok && render(s.data));
+      });
+      window.usermod.on<Usermod.MachineState>("machine:state", render);
+      setInterval(() => void window.usermod.invoke<Usermod.MachineState>("machine:state").then((s) => s.ok && render(s.data)), 5000);
+  })();
 })();

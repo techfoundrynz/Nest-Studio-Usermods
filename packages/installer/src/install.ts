@@ -7,13 +7,14 @@
  *   pnpm run install:app -- --uninstall  restore the original app.asar
  *   pnpm run install:app -- --build-only build build/app.asar without touching the install (no admin)
  *   flags: --force  --skip-build  --install-root=<dir>  --yes  --allow-untested (see versions.json)
- *   mods:  normally chosen inside Nest Studio (MODS menu -> Mods…). Fallback when a mod breaks the UI:
+ *   mods:  normally chosen inside Nest Studio (MODS menu -> Enable/disable mods). Fallback when a mod breaks the UI:
  *          --select-mods            interactive picker
  *          --disable-mods=a,b       --enable-mods=a,b       --disable-all-mods   (edit mods.json, no rebuild)
  *   build options (baked into the patched archive; asked interactively when not given):
  *          --devtools / --no-devtools   re-enable Chromium DevTools in the app (F12 toggles them)
  *          --cam-docs / --no-cam-docs   start the CAM service with ENABLE_DOCS=1 (Swagger at 127.0.0.1:9630/docs)
  *          --multi-side / --no-multi-side   allow more than two machining sides (Flip Setup "+" stays available)
+ *          --bed-size / --no-bed-size   let the bed-size mod override the machine's travel limits
  *
  * Nest Studio's Electron build only loads code from app.asar (resources\ on Windows, Contents/Resources
  * inside the .app on macOS), so the loader is injected by rebuilding that archive: extract -> patch ->
@@ -61,6 +62,15 @@ interface BuildOption {
   expectedMarkers?: number;
 }
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+/* Bed size override: the app's hard-coded travel limits and work-platform size become lookups of a global
+ * the loader's preload fills in (see the bedSize build option below). */
+const BED_MARKER = "/* NEST-USERMOD-BED */";
+const LIT_UPPER = `{\n  X: { min: -238, max: 0 },\n  Y: { min: -200, max: 0 },\n  Z: { min: -123, max: 0 }\n}`;
+const PATCHED_UPPER = `{ ${BED_MARKER}\n  get X() { return globalThis.__usermodBed?.X ?? { min: -238, max: 0 }; },\n  get Y() { return globalThis.__usermodBed?.Y ?? { min: -200, max: 0 }; },\n  get Z() { return globalThis.__usermodBed?.Z ?? { min: -123, max: 0 }; }\n}`;
+const LIT_LOWER = `{\n  x: { min: -238, max: 0 },\n  y: { min: -200, max: 0 },\n  z: { min: -123, max: 0 }\n}`;
+const PATCHED_LOWER = `{ ${BED_MARKER}\n  get x() { return globalThis.__usermodBed?.X ?? { min: -238, max: 0 }; },\n  get y() { return globalThis.__usermodBed?.Y ?? { min: -200, max: 0 }; },\n  get z() { return globalThis.__usermodBed?.Z ?? { min: -123, max: 0 }; }\n}`;
+const LIT_PLATFORM = "const EDITOR_WORK_PLATFORM_SIZE = 225;";
+const PATCHED_PLATFORM = `const EDITOR_WORK_PLATFORM_SIZE = Number(globalThis.__usermodBedPlatform) > 0 ? Number(globalThis.__usermodBedPlatform) : 225; ${BED_MARKER}`;
 const BUILD_OPTIONS: BuildOption[] = [
   {
     id: "devtools",
@@ -130,6 +140,25 @@ const BUILD_OPTIONS: BuildOption[] = [
         .replace("const offset = getFlipPlatformOffset(entry.flipDirection, dimensions, entry.slot ?? 0); /* NEST-USERMOD-MULTISIDE */", "const offset = getFlipPlatformOffset(entry.flipDirection, dimensions);")
         .replace("getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions, bottomEntry.slot ?? 0) /* NEST-USERMOD-MULTISIDE */", "getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions)")
         .replace("rankCoordsForGeneration(left) - rankCoordsForGeneration(right) || list2.indexOf(left) - list2.indexOf(right)); /* NEST-USERMOD-MULTISIDE */", "rankCoordsForGeneration(left) - rankCoordsForGeneration(right));")
+  },
+  {
+    /*
+     * The renderer hard-codes the machine envelope (X -238, Y -200, Z -123) in two chunks: FullApp checks a
+     * program's bounds against it and limits continuous jog, DevicePage checks travel with the workpiece
+     * offset applied, and engine-3d draws a fixed 225 mm work platform. This turns those constants into
+     * lookups of globalThis.__usermodBed, which the loader's preload sets from the bed-size mod's settings
+     * before any app code runs; without the mod the app's own numbers are used.
+     */
+    id: "bedSize",
+    cli: "bed-size",
+    label: "Bed size override",
+    description: "Lets the bed-size mod tell the app how much travel the machine really has, instead of the built-in 238 x 200 x 123 mm.",
+    marker: BED_MARKER,
+    target: "renderer",
+    assets: /^(FullApp|DevicePage|engine-3d)-.*\.js$/,
+    expectedMarkers: 4,
+    apply: (s) => s.split(LIT_UPPER).join(PATCHED_UPPER).split(LIT_LOWER).join(PATCHED_LOWER).replace(LIT_PLATFORM, PATCHED_PLATFORM),
+    revert: (s) => s.split(PATCHED_UPPER).join(LIT_UPPER).split(PATCHED_LOWER).join(LIT_LOWER).replace(PATCHED_PLATFORM, LIT_PLATFORM)
   }
 ];
 const countMarkers = (source: string, marker: string): number => source.split(marker).length - 1;
@@ -283,7 +312,7 @@ async function loadAsar(): Promise<typeof import("@neststudio-usermods/asar")> {
 }
 
 /* -------------------------------------------------------------------- mods */
-/* Normally chosen inside Nest Studio (MODS -> Mods…). The CLI is the fallback when a mod breaks the UI. */
+/* Normally chosen inside Nest Studio (MODS -> Enable/disable mods). The CLI is the fallback when a mod breaks the UI. */
 const MODS_DIR = path.join(ROOT, "mods");
 const CONFIG_FILE = path.join(ROOT, "mods.json");
 interface ModInfo {
@@ -659,7 +688,7 @@ async function menu(options: Options): Promise<void> {
     choices: [
       { title: installed ? "Re-install / update loader" : "Install loader", value: "install", description: `Rebuild app.asar with the loader and build options (needs ${IS_MAC ? "write access to the app bundle" : "an elevated terminal"})` },
       { title: "Build only", value: "build-only", description: "Build build/app.asar without touching the install" },
-      { title: "Enable / disable mods", value: "select-mods", description: "Fallback for the in-app Mods… dialog, e.g. to switch off a mod that breaks the UI" },
+      { title: "Enable / disable mods", value: "select-mods", description: "Fallback for the in-app Enable/disable mods window, e.g. to switch off a mod that breaks the UI" },
       { title: "Uninstall", value: "uninstall", description: "Restore the original app.asar", disabled: !installed },
       { title: "Exit", value: "exit" }
     ]

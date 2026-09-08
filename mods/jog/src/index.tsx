@@ -276,7 +276,7 @@
   }
   ui.toolbar.addButton({
     id: "jog",
-    title: "Jog (keyboard / controller)",
+    title: "Jog",
     icon: () => ui.icons.svg("M7 6h10a5 5 0 0 1 4.9 6l-1 5.2a2.5 2.5 0 0 1-4.3 1.2L14.6 16H9.4l-2 2.4a2.5 2.5 0 0 1-4.3-1.2l-1-5.2A5 5 0 0 1 7 6zm0 3v2H5v2h2v2h2v-2h2v-2H9V9H7zm9 0a1.2 1.2 0 1 0 0 2.4A1.2 1.2 0 0 0 16 9zm2.5 2.5a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z"),
     order: 46,
     onClick: (button) => {

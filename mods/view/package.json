@@ -1,0 +1,22 @@
+{
+  "name": "@neststudio-mods/view",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "3D view: isometric projection and camera presets, plus toolpath colouring by depth or operation",
+  "usermod": {
+    "name": "view",
+    "ui": "dist/index.js",
+    "order": 12,
+    "description": "3D view: isometric projection and camera presets, plus toolpath colouring by depth or operation"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json -w --preserveWatchOutput"
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

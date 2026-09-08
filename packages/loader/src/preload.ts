@@ -34,6 +34,24 @@
       window.usermod = bridge;
     }
 
+    /* Bed size override. Asked for synchronously because the app's renderer chunks read their travel limits
+     * and work-platform size while evaluating, which happens right after this preload. Only exposed when the
+     * bed-size mod is on, so the app keeps its own numbers otherwise. Needs the installer's --bed-size option. */
+    try {
+      const bed = ipcRenderer.sendSync<Usermod.BedOverride | undefined>("usermod:bed-sync");
+      if (bed?.enabled) {
+        if (process.contextIsolated) {
+          contextBridge.exposeInMainWorld("__usermodBed", bed.limits);
+          contextBridge.exposeInMainWorld("__usermodBedPlatform", bed.platform);
+        } else {
+          globalThis.__usermodBed = bed.limits;
+          globalThis.__usermodBedPlatform = bed.platform;
+        }
+      }
+    } catch {
+      /* older loader or no handler: the app keeps its built-in limits */
+    }
+
     const loadScript = (mod: Usermod.UiModEntry): Promise<boolean> =>
       new Promise((resolve) => {
         const script = document.createElement("script");

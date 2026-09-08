@@ -1,0 +1,25 @@
+{
+  "name": "@neststudio-mods/appearance",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Theme (light / dark, follow the OS) and UI scale (zoom, compact density) in one window",
+  "usermod": {
+    "name": "appearance",
+    "main": "dist/main.js",
+    "ui": "dist/ui.js",
+    "order": 15,
+    "description": "Theme (light / dark, follow the OS) and UI scale (zoom, compact density) in one window"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",
+    "watch": "concurrently \"tsc -p tsconfig.main.json -w --preserveWatchOutput\" \"tsc -p tsconfig.ui.json -w --preserveWatchOutput\""
+  },
+  "devDependencies": {
+    "@neststudio-usermods/types": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "electron": "catalog:"
+  }
+}

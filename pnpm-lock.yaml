@@ -69,13 +69,43 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/appearance:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.7(@types/react@19.2.18)
+      electron:
+        specifier: 'catalog:'
+        version: 39.8.10(supports-color@8.1.1)
+
   mods/arc-fit:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
 
-  mods/camera-timelapse:
+  mods/bed-size:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.7(@types/react@19.2.18)
+
+  mods/cutter:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -93,12 +123,6 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/dark-mode:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
   mods/device-macros:
     devDependencies:
       '@neststudio-usermods/types':
@@ -111,23 +135,14 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/export-copy:
+  mods/export:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
-
-  mods/export-filename:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
-  mods/export-report:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.18
@@ -135,23 +150,11 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/feed-override:
+  mods/feed-scale:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
-
-  mods/feeds-speeds:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.7(@types/react@19.2.18)
 
   mods/final-geometry:
     devDependencies:
@@ -188,12 +191,6 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
-
-  mods/iso-view:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
 
   mods/jobs:
     devDependencies:
@@ -237,7 +234,13 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/live-override:
+  mods/machine-state:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
+  mods/mods-menu:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -249,13 +252,7 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/machine-state:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
-  mods/mods-menu:
+  mods/overrides:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -294,35 +291,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
-  mods/status-hud:
+  mods/timelapse:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
 
-  mods/tool-change-assistant:
+  mods/tool-change:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
         version: link:../../packages/types
-
-  mods/tool-change-guard:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
-  mods/tool-library:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      '@types/react':
+      '@types/node':
         specifier: 'catalog:'
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.7(@types/react@19.2.18)
+        version: 22.20.1
 
   mods/tool-split:
     devDependencies:
@@ -332,24 +314,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.1
-
-  mods/tool-visual:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
-  mods/toolpath-color:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.7(@types/react@19.2.18)
 
   mods/toolpath-modifiers:
     devDependencies:
@@ -366,13 +330,7 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/ui-scale:
-    devDependencies:
-      '@neststudio-usermods/types':
-        specifier: workspace:*
-        version: link:../../packages/types
-
-  mods/work-offsets:
+  mods/tools:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*
@@ -384,7 +342,19 @@ importers:
         specifier: 'catalog:'
         version: 19.2.7(@types/react@19.2.18)
 
-  mods/z-probe:
+  mods/view:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.7(@types/react@19.2.18)
+
+  mods/work-zero:
     devDependencies:
       '@neststudio-usermods/types':
         specifier: workspace:*

@@ -56,7 +56,7 @@
       <>
         <h3>Toolpath modifiers</h3>
         <Sub>Post-processors switched on here run on each toolpath as the CAM generates it, so the Preview tab, the saved project and the export all carry the result. Export and send skip processors that were already applied at generation.</Sub>
-        {!info.postprocessors.length ? <Sub>No post-processor mods are enabled (MODS ▸ Mods…).</Sub> : null}
+        {!info.postprocessors.length ? <Sub>No post-processor mods are enabled (MODS ▸ Enable/disable mods).</Sub> : null}
         {info.postprocessors.map((p) => (
           <Toggle
             key={p.name}
@@ -83,7 +83,7 @@
 
   ui.toolbar.addButton({
     id: "toolpath-modifiers",
-    title: "Toolpath modifiers (apply post-processors at generation)",
+    title: "Toolpath modifiers",
     icon: () => ui.icons.svg("M3 4h18l-7 8.5V20l-4-2v-5.5L3 4zm3.9 2 4.6 5.6.5.6v6.1l.9.5v-6.6l.5-.6L18.1 6H6.9z"),
     order: 34,
     onClick: (button) => {
