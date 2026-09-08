@@ -1,0 +1,10 @@
+{
+  "name": "@neststudio-mods/react-demo",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Reference React UI mod: a live machine-state panel written in TSX against the bundled React runtime",
+  "usermod": { "name": "react-demo", "ui": "dist/index.js", "order": 90, "description": "Reference React UI mod: a live machine-state panel written in TSX against the bundled React runtime" },
+  "scripts": { "build": "tsc -p tsconfig.json", "watch": "tsc -p tsconfig.json -w --preserveWatchOutput" },
+  "devDependencies": { "@neststudio-usermods/types": "workspace:*", "@types/react": "19.2.18", "@types/react-dom": "19.2.7" }
+}

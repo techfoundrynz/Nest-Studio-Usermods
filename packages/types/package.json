@@ -5,5 +5,11 @@
   "license": "GPL-3.0-only",
   "description": "Ambient TypeScript declarations for Nest Studio user mods (main-process and renderer)",
   "types": "index.d.ts",
-  "files": ["*.d.ts"]
+  "files": [
+    "*.d.ts"
+  ],
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7"
+  }
 }

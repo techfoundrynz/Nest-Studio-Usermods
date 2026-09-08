@@ -128,6 +128,34 @@ Theme note: Nest Studio applies `data-theme="light|dark"` on `<html>` from `app.
 store and ships full token sets for both. `dark-mode` switches it by writing the store through
 `window.api.store.write` and reloading the renderer.
 
+## React UI mods (TSX)
+
+`packages/react-runtime` bundles React 19 + ReactDOM into one classic script that the loader injects after
+the UI kit. It exposes the classic UMD globals `React` and `ReactDOM` (client API) plus
+`window.usermodReactRuntime.mount(container, element)`, which creates or reuses a root and returns an
+unmount function. It is a separate React from the app's own: mount only into DOM you own (kit modal or
+popover bodies, your own elements), never into the app's tree.
+
+Mod tsconfig for TSX, still emitted as a plain injected script (no imports):
+
+```json
+{
+  "compilerOptions": {
+    "module": "None",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["@neststudio-usermods/types/renderer", "@neststudio-usermods/types/react"],
+    "jsx": "react",
+    "rootDir": "src", "outDir": "dist"
+  },
+  "include": ["src/index.tsx"]
+}
+```
+
+with `@types/react` / `@types/react-dom` as devDependencies (pinned like everything else). `@types/react`
+declares the global `React` namespace for script files, so hooks are `const { useState } = React;` and JSX
+compiles to `React.createElement` with full element typing. `mods/react-demo` is the reference: a live
+machine-state panel mounted into a kit modal and unmounted when the modal closes.
+
 ## Main mods (main process)
 
 ```ts

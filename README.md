@@ -85,6 +85,7 @@ packages/
   asar/        @neststudio-usermods/asar       dependency-free asar extract/pack/list/cat (library + nest-asar CLI)
   installer/   @neststudio-usermods/installer  interactive installer (tsx + prompts)
   ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms
+  react-runtime/ @neststudio-usermods/react-runtime  React 19 bundled (esbuild) as window.usermodReact for TSX mods
 mods/
   feed-override, arc-fit, tool-change-guard, program-header, safe-shutdown, export-copy,
   strip-comments, line-numbers                                                              (post-processors)
@@ -123,7 +124,8 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `job-notifier` | main + ui | Windows toast (and optional webhook) when a machine job finishes, alarms or pauses; status panel in the MODS menu |
 | `export-report` | post + ui | JSON stats report per export (bounds, tools, feeds) in `data/reports`; "Last export report…" in the menu |
 | `iso-view` | ui | Toolbar toggle between perspective and an isometric-style view of the 3D scene; right-click for Top/Front/Right/Iso/Reset |
-| `tool-visual` | ui | Sizes the preview's cutter model to the diameter of the tool for the toolpath being simulated (the app uses one fixed bit) |
+| `tool-visual` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper/V, drill); the app uses one fixed bit |
+| `react-demo` | ui (React) | Reference TSX mod: live machine-state panel in a modal, mounted with the bundled React runtime |
 | `machine-state` | main | Shared machine status / progress / ETA (`machine:state`) for other mods; optional console log to `data/console` |
 | `status-hud` | ui | Always-visible status pill with progress bar and ETA; click for details |
 | `device-macros` | ui | Toolbar button with user-defined G-code / command macros (with confirmation) |

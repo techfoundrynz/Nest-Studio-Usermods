@@ -1,0 +1,21 @@
+{
+  "name": "@neststudio-usermods/react-runtime",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "React 19 bundled as a classic script for UI mods (window.usermodReact); injected by the loader after the UI kit",
+  "main": "dist/react-runtime.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "esbuild": "0.28.2"
+  }
+}

@@ -68,6 +68,9 @@
       "path": "./mods/project-backup/tsconfig.json"
     },
     {
+      "path": "./mods/react-demo/tsconfig.json"
+    },
+    {
       "path": "./mods/safe-shutdown/tsconfig.json"
     },
     {
@@ -105,6 +108,9 @@
     },
     {
       "path": "./packages/loader/tsconfig.tests.json"
+    },
+    {
+      "path": "./packages/react-runtime/tsconfig.json"
     },
     {
       "path": "./packages/types/tsconfig.json"
