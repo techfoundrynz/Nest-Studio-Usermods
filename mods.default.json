@@ -190,10 +190,6 @@
       "template": "{name}",
       "saveDir": ""
     },
-    "tools": {
-      "maxRpm": 24000,
-      "favourites": []
-    },
     "work-zero": {
       "positions": [],
       "travelRetract": "G53 G90 G0 Z-1",
@@ -216,6 +212,10 @@
       "followSystem": false,
       "zoom": 1,
       "compact": false
+    },
+    "feeds-speeds": {
+      "maxRpm": 24000,
+      "favourites": []
     }
   }
 }

@@ -9,17 +9,6 @@ interface Window {
   usermod: Usermod.Bridge;
   /** Nest Studio's own preload API. */
   api: NestStudio.Api;
-  usermodMenu?: { toggle(): Promise<void>; close(): void };
-  usermodGcodeLab?: { open(): () => void };
-  usermodDarkMode?: { setTheme(theme: NestStudio.Theme): Promise<void>; toggle(): Promise<void>; current(): NestStudio.Theme };
-  /** work-zero mod: run the Z touch-plate cycle from other mods (tool-change offers it at a hold). */
-  usermodZProbe?: { run(): Promise<void>; enabled(): boolean };
-  /** cycles mod: open the generator dialog on a given tab. */
-  usermodCycles?: { open(tab?: "thread" | "hole" | "surface"): void };
-  /** Merged mods that open a tabbed window: tools (library / feeds), work-zero (offsets / probe), view. */
-  usermodTools?: { open(tab?: string): void };
-  usermodWorkZero?: { open(tab?: string): void };
-  usermodView?: { open(tab?: string): void };
 }
 
 /* Minimal view of the app's three.js scene managers, exposed by the installer's scene patch

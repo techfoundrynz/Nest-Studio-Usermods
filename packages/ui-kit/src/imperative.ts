@@ -45,6 +45,20 @@ function iconNode(icon: Usermod.IconSource): Node {
   return icon;
 }
 
+/* --------------------------------------------------------- mod-to-mod APIs */
+/** Kept here, not on window, so no mod's private handle has to appear in the shared Window interface. */
+const providers = new Map<string, unknown>();
+export function provide(name: string, api: unknown): void {
+  providers.set(name, api);
+  rt.log("info", `provides "${name}"`);
+}
+/** The caller names the shape it expects, exactly as with usermod.invoke<T>; null when that mod is off. */
+export function consume<T>(name: string): T | null {
+  const api = providers.get(name);
+  return api === undefined ? null : (api as T);
+}
+export const provided = (): string[] => [...providers.keys()];
+
 /* ------------------------------------------------------------------- menu */
 const isHeading = (entry: Usermod.MenuEntry): entry is Usermod.MenuHeading => "heading" in entry;
 /** Popover of clickable rows. Rows close the menu before running, so an action may open its own popover. */
@@ -398,6 +412,9 @@ export function settingsForm(modName: string, { title, fields, reloadPostprocess
 
 export const imperative: Omit<Usermod.UI, "version" | "react"> = {
   toolbar,
+  provide,
+  consume,
+  provided,
   popover,
   menu,
   closePopovers,

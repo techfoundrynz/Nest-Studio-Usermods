@@ -74,16 +74,18 @@ moduleInternals._load = function (this: unknown, request: string, ...rest: unkno
 const rootDir = path.resolve(__dirname, "..", "..", "..", "..");
 const configPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "usermod-test-")), "mods.json");
 process.env.USERMOD_CONFIG = configPath;
-{
-  const seeded = JSON.parse(fs.readFileSync(path.join(rootDir, "mods.default.json"), "utf8")) as { enabled: string[]; settings: Record<string, unknown> };
-  // An old-style entry so the loader's merge migration (keyboard-jog -> jog) is exercised on load.
-  seeded.enabled = ["keyboard-jog"];
-  seeded.settings["keyboard-jog"] = { feed: 1200, distance: 50 };
-  fs.writeFileSync(configPath, JSON.stringify(seeded, null, 2), "utf8");
-}
+fs.copyFileSync(path.join(rootDir, "mods.default.json"), configPath);
 process.on("exit", () => fs.rmSync(path.dirname(configPath), { recursive: true, force: true }));
 
-const loader = require(path.join(__dirname, "..", "main.js")) as { ROOT_DIR: string; CONFIG_FILE: string };
+interface MigrationForTest {
+  into: string;
+  settings(old: Record<string, unknown>, wasEnabled: boolean): Record<string, unknown>;
+}
+const loader = require(path.join(__dirname, "..", "main.js")) as {
+  ROOT_DIR: string;
+  CONFIG_FILE: string;
+  applyMigrations(config: Usermod.Config, migrations: Record<string, MigrationForTest>): { config: Usermod.Config; changed: string[] };
+};
 const invoke = <T = unknown>(channel: string, ...args: unknown[]): Promise<Usermod.IpcResult<T>> => {
   const handler = handlers.get(channel);
   if (!handler) throw new Error(`no handler for ${channel}`);
@@ -106,10 +108,22 @@ void (async () => {
   // mods.default.json ships with nothing enabled; enable the bundled set for the rest of the run.
   check("loader root matches the repo root", path.resolve(loader.ROOT_DIR) === rootDir, loader.ROOT_DIR);
   const initial = data(await invoke<Usermod.Info>("usermod:info"));
-  check("nothing enabled by default except core (and the migrated jog)", initial.available.filter((m) => m.enabled).every((m) => m.core || m.name === "jog") && initial.available.some((m) => m.core && m.name === "mods-menu"));
-  const jogSettings = initial.config.settings["jog"] ?? {};
-  check("old keyboard-jog entry migrated into jog with renamed settings", initial.config.enabled.includes("jog") && !initial.config.enabled.includes("keyboard-jog") && jogSettings.keyboardFeed === 1200 && jogSettings.keyboardDistance === 50 && jogSettings.keyboardEnabled === true && initial.config.settings["keyboard-jog"] === undefined, JSON.stringify(jogSettings));
-  check("migration rewrote mods.json", !fs.readFileSync(configPath, "utf8").includes('"keyboard-jog"'));
+  check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
+  // The rename/merge machinery carries no entries today, so exercise it directly.
+  const moved = loader.applyMigrations(
+    { enabled: ["old-mod", "arc-fit"], settings: { "old-mod": { feed: 1200 }, "arc-fit": { minBytes: 1 } } },
+    { "old-mod": { into: "jog", settings: (o, wasEnabled) => ({ keyboardEnabled: wasEnabled, keyboardFeed: o.feed }) } }
+  );
+  check(
+    "config migration renames a mod, carries its settings over and leaves the rest alone",
+    moved.changed.length === 1 &&
+      moved.config.enabled.join(",") === "arc-fit,jog" &&
+      moved.config.settings["jog"]?.keyboardFeed === 1200 &&
+      moved.config.settings["jog"]?.keyboardEnabled === true &&
+      moved.config.settings["old-mod"] === undefined &&
+      moved.config.settings["arc-fit"]?.minBytes === 1,
+    JSON.stringify(moved)
+  );
   const enabledSet = initial.available.filter((m) => !m.core).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
   check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 9 && enabledInfo.mainMods.length === 10, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
@@ -203,7 +217,7 @@ void (async () => {
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("view") === "ui" && reloadOf("jobs") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
   check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "final-geometry", "jobs", "lan-monitor", "machine-state", "project-backup", "timelapse", "toolpath-modifiers"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "final-geometry", "gcode-lab", "jobs", "jog", "lan-monitor", "mods-menu", "overrides", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"]), info.uiMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "feeds-speeds", "final-geometry", "gcode-lab", "jobs", "jog", "lan-monitor", "mods-menu", "overrides", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"]), info.uiMods.map((m) => m.name).join(","));
 
   // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
   let dialogArgs: unknown[] = [];

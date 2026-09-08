@@ -186,7 +186,7 @@
 
   const handle = ui.toolbar.addButton({
     id: "appearance",
-    title: "Appearance: theme and scale",
+    title: "Appearance",
     icon: () => (current() === "dark" ? ui.icons.sun() : ui.icons.moon()),
     order: 15,
     onClick: (button) => {
@@ -197,5 +197,4 @@
   // Keep the icon in step with the theme, whoever changed it.
   new MutationObserver(() => handle.setIcon(current() === "dark" ? ui.icons.sun : ui.icons.moon)).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  window.usermodDarkMode = { setTheme, toggle: toggleTheme, current };
 })();

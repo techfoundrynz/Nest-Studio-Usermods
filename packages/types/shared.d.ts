@@ -311,6 +311,16 @@ declare namespace Usermod {
       /** Every registered button, in bar order, with whether it is currently visible or in the overflow menu. */
       entries(): { id: string; title: string; visible: boolean; pinned: boolean }[];
     };
+    /**
+     * The one place mods reach each other in the renderer. A mod publishes a small API under a name it owns
+     * (`provide("probe", { run, enabled })`) and another looks it up when it needs it. Nothing lands on
+     * `window`, so a mod's own handle stays out of the shared types: like `usermod.invoke<T>` and
+     * `api.call<T>` in the main process, the caller names the shape it expects and gets null when the
+     * providing mod is switched off.
+     */
+    provide(name: string, api: unknown): void;
+    consume<T>(name: string): T | null;
+    provided(): string[];
     popover(anchor: HTMLElement, options?: PopoverOptions): PopoverHandle;
     /** Popover of clickable rows under `anchor`; the toolbar's overflow menu is one of these. */
     menu(anchor: HTMLElement, items: MenuEntry[], options?: MenuOptions): PopoverHandle;

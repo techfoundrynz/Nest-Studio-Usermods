@@ -283,5 +283,4 @@
       open();
     }
   });
-  window.usermodGcodeLab = { open };
 })();

@@ -1,6 +1,8 @@
 /*
  * View: how the 3D scene is drawn, in one window with a tab per concern.
  *
+ * One window, both parts of it.
+ *
  * Camera: switch between the app's perspective camera and an isometric-style projection (a very narrow field
  * of view at a scaled distance, so the app's own orbit, zoom and pan keep working), and jump to Top / Front /
  * Right / Back / Left / Iso or reset. Toolpath colour: repaint the preview's paths by Z depth or per operation
@@ -15,12 +17,12 @@
   const ui = window.usermodUI;
   rt.register({ name: "view", version: "0.1.0" });
 
-  interface Tab {
-    id: string;
+  /** A section renders into `body` and may return a cleanup function (React panels return their unmount). */
+  interface Section {
     label: string;
     open(body: HTMLElement, close: () => void): void | (() => void);
   }
-  const tabs: Tab[] = [];
+  const sections: Section[] = [];
   /** Features share the one toolbar button: the camera marks the isometric projection as active on it. */
   let handle: Usermod.ToolbarButtonHandle | null = null;
   const setBadge = (on: boolean): void => handle?.setBadge(on);
@@ -166,7 +168,7 @@
           ])
         );
       };
-    tabs.push({ id: "camera", label: "Camera", open: (body) => cameraPanel(body) });
+    sections.push({ label: "Camera", open: (body) => cameraPanel(body) });
   })();
 
   (function feature(): void {
@@ -400,42 +402,32 @@
           </>
         );
       }
-    tabs.push({ id: "colour", label: "Toolpath colour", open: (body) => ui.react.mount(body, <Panel />) });
+    sections.push({ label: "Toolpath colour", open: (body) => ui.react.mount(body, <Panel />) });
   })();
 
-  rt.addStyle(
-    `.usermod-tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-     .usermod-tabs .usermod-btn[data-active=true]{background:#0f766e;color:#fff}`,
-    "view-tabs"
-  );
-  function openWindow(startTab = tabs[0]?.id): void {
-    const modal = ui.modal("View", { width: 460 });
-    const strip = rt.el("div", { class: "usermod-tabs" });
-    const body = rt.el("div");
-    modal.body.append(strip, body);
-    let cleanup: (() => void) | void;
-    const show = (id: string): void => {
-      const tab = tabs.find((t) => t.id === id) ?? tabs[0];
-      if (!tab) return;
-      if (typeof cleanup === "function") cleanup();
-      body.replaceChildren();
-      for (const child of strip.children) if (child instanceof HTMLElement) child.dataset.active = String(child.dataset.tab === tab.id);
-      cleanup = tab.open(body, modal.close);
-    };
-    for (const tab of tabs) {
-      const button = ui.button(tab.label, () => show(tab.id));
-      button.dataset.tab = tab.id;
-      strip.appendChild(button);
+  rt.addStyle(`.usermod-view-section{margin-top:14px}.usermod-view-section:first-child{margin-top:0}`, "view-sections");
+  /** Everything in one window: the camera controls and the colouring, one under the other. */
+  function openWindow(): void {
+    const cleanups: (() => void)[] = [];
+    const modal = ui.modal("View", {
+      width: 460,
+      onClose: () => {
+        for (const cleanup of cleanups) cleanup();
+      }
+    });
+    for (const section of sections) {
+      const body = rt.el("div", { class: "usermod-view-section" });
+      modal.body.append(rt.el("h4", { text: section.label }), body);
+      const cleanup = section.open(body, modal.close);
+      if (typeof cleanup === "function") cleanups.push(cleanup);
     }
-    show(startTab ?? "");
   }
 
   handle = ui.toolbar.addButton({
     id: "view",
-    title: "3D view: projection, presets, toolpath colour",
+    title: "3D view options",
     icon: () => ui.icons.svg("M12 2.5 3.5 7.25v9.5L12 21.5l8.5-4.75v-9.5L12 2.5zm0 2.3 6 3.35-6 3.35-6-3.35 6-3.35zM5.5 9.1l5.5 3.07v6.63L5.5 15.7V9.1zm13 0v6.6l-5.5 3.1v-6.63L18.5 9.1z"),
     order: 12,
     onClick: () => openWindow()
   });
-  window.usermodView = { open: openWindow };
 })();

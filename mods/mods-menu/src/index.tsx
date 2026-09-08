@@ -319,5 +319,6 @@
     onClick: toggle
   });
 
-  window.usermodMenu = { toggle, close: closeMenu };
+  // app-tools's Ctrl+Shift+M asks for this.
+  ui.provide("mods-menu", { toggle, close: closeMenu });
 })();

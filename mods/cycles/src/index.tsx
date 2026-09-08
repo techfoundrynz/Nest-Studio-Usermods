@@ -24,7 +24,8 @@
      .usermod-cyc-tabs .usermod-btn[data-active=true]{background:#0f766e;color:#fff}
      .usermod-cyc-out{display:grid;grid-template-columns:1fr 300px;gap:14px;margin-top:10px}
      .usermod-cyc-out .usermod-mono{max-height:320px}
-     .usermod-cyc-canvas{width:300px;height:300px;border:1px solid #cfd4dc;border-radius:8px;background:#fff}
+     .usermod-cyc-canvas{display:block;width:300px;height:300px;border:1px solid #cfd4dc;border-radius:8px;background:#fff}
+     .usermod-cyc-side{height:120px;margin-top:8px}
      html[data-theme=dark] .usermod-cyc-canvas{border-color:#444;background:#1c1c1c}`,
     "cycles"
   );
@@ -38,6 +39,17 @@
     const n = Number(String(s).trim().replace(",", "."));
     return Number.isFinite(n) ? n : fallback;
   };
+  /**
+   * Evenly spaced values from `from` to `to` with a step no larger than `max`. Stepping by `+= max` and then
+   * appending the end instead lands the last two values microns apart when the span is nearly a multiple of
+   * the step, which shows up as two passes cutting the same line.
+   */
+  function spread(from: number, to: number, max: number): number[] {
+    const span = to - from;
+    if (!(Math.abs(span) > 1e-9)) return [from];
+    const steps = Math.max(1, Math.ceil(Math.abs(span) / Math.max(1e-6, max)));
+    return Array.from({ length: steps + 1 }, (_, i) => from + (span * i) / steps);
+  }
 
   interface Common {
     safeZ: number;
@@ -102,6 +114,17 @@
   }
   /** ISO metric: thread depth 0.5413 P, minor diameter D - 1.0825 P. */
   const threadDepthOf = (pitch: number): number => 0.5413 * pitch;
+  /**
+   * Z of the end of each full revolution climbing from `bottom` to `top`, one pitch per turn. A thread whose
+   * length is not a whole number of pitches gets a last, shorter turn that stops exactly at the top rather
+   * than cutting above it.
+   */
+  function helixTurns(bottom: number, top: number, pitch: number): number[] {
+    const out: number[] = [];
+    for (let z = bottom + pitch; z < top - 1e-6; z += pitch) out.push(z);
+    out.push(top);
+    return out;
+  }
 
   function generateThread(p: ThreadParams): Program {
     const em = new Emitter(p, `${p.kind} ${p.hand}-hand thread M${fmt(p.majorDiameter)}x${fmt(p.pitch)}, ${p.cut}`);
@@ -118,15 +141,16 @@
     if (p.hand === "left") ccw = !ccw;
     if (p.cut === "conventional") ccw = !ccw;
     const bottom = p.topZ - p.length;
-    const turns = Math.max(1, Math.ceil(p.length / p.pitch));
     const passes = Math.max(1, Math.round(p.passes));
-    // Radial engagement grows with sqrt(i/n): roughly constant chip area per pass.
+    /* Equal radial increments, so each pass removes about the same amount and the numbers are predictable
+     * (passes of depth/passes mm). The tool reaches full thread depth only on the last pass. */
     const radii: number[] = [];
     for (let i = 1; i <= passes; i += 1) {
-      const c = Math.sqrt(i / passes);
-      radii.push(p.kind === "internal" ? finalR - depth + depth * c : finalR + depth - depth * c);
+      const cut = (depth * i) / passes;
+      radii.push(p.kind === "internal" ? finalR - depth + cut : finalR + depth - cut);
     }
-    if (p.springPass) radii.push(finalR);
+    if (p.springPass) radii.push(finalR); // a second pass at full size, cleaning up tool deflection
+    if (p.kind === "internal" && !p.preMill) em.warnings.push("Internal thread without pre-milling: the hole must already be there, at least the cutter diameter wide, because the first move plunges at the centre.");
     const lead = Math.max(1, p.cutterDiameter * 0.5);
 
     if (p.preMill && p.kind === "internal") {
@@ -147,7 +171,7 @@
           em.line({ z: bottom }, p.plungeFeed);
           // Tangential lead-in: half circle from the centre to the start point on the thread radius.
           em.arc(!ccw, { x: c.x + r, y: c.y }, r / 2, 0, p.feed);
-          for (let t = 1; t <= turns; t += 1) em.arc(!ccw, { x: c.x + r, y: c.y, z: bottom + t * p.pitch }, -r, 0, p.feed);
+          for (const z of helixTurns(bottom, p.topZ, p.pitch)) em.arc(!ccw, { x: c.x + r, y: c.y, z }, -r, 0, p.feed);
           em.arc(!ccw, { x: c.x, y: c.y }, -r / 2, 0, p.feed);
           em.rapid({ z: p.safeZ });
         } else {
@@ -155,7 +179,7 @@
           em.rapid({ z: Math.min(p.safeZ, p.topZ + 2) });
           em.line({ z: bottom }, p.plungeFeed);
           em.line({ x: c.x + r, y: c.y }, p.feed);
-          for (let t = 1; t <= turns; t += 1) em.arc(!ccw, { x: c.x + r, y: c.y, z: bottom + t * p.pitch }, -r, 0, p.feed);
+          for (const z of helixTurns(bottom, p.topZ, p.pitch)) em.arc(!ccw, { x: c.x + r, y: c.y, z }, -r, 0, p.feed);
           em.line({ x: c.x + r + lead, y: c.y }, p.feed);
           em.rapid({ z: p.safeZ });
         }
@@ -180,12 +204,13 @@
   /** Helix down at each radius (small to large), flat circle at the bottom, back to the cleared centre, retract. */
   function helixHole(em: Emitter, p: Common & { climb?: boolean; cutterDiameter: number }, c: Point, radii: number[], depth: number, pitch: number, topZ: number, ccw: boolean): void {
     const bottom = topZ - depth;
-    const turns = Math.max(1, Math.ceil(depth / pitch));
+    // Turn ends, evenly spread so the last turn is not a sliver and the final one lands exactly on the floor.
+    const levels = spread(topZ, bottom, pitch).slice(1);
     for (const r of radii) {
       em.rapid({ x: c.x + r, y: c.y });
       em.rapid({ z: Math.min(p.safeZ, topZ + 1) });
       em.line({ z: topZ }, p.plungeFeed);
-      for (let t = 1; t <= turns; t += 1) em.arc(!ccw, { x: c.x + r, y: c.y, z: Math.max(bottom, topZ - t * pitch) }, -r, 0, p.feed);
+      for (const z of levels) em.arc(!ccw, { x: c.x + r, y: c.y, z }, -r, 0, p.feed);
       em.arc(!ccw, { x: c.x + r, y: c.y }, -r, 0, p.feed); // flatten the bottom
       em.line({ x: c.x, y: c.y }, p.feed);
       em.rapid({ z: p.safeZ });
@@ -200,22 +225,17 @@
     if (!p.centers.length) em.warnings.push("No hole positions given.");
     const roughR = p.finishPass ? Math.max(0.05, finalR - p.finishAllowance) : finalR;
     const step = Math.max(0.2, p.cutterDiameter * (p.stepoverPct / 100));
-    const radii: number[] = [];
-    if (p.diameter <= 2 * p.cutterDiameter + 0.01) radii.push(roughR);
-    else {
-      let r = Math.min(roughR, p.cutterDiameter * 0.45); // first pass also clears the centre
-      while (r < roughR - 0.01) {
-        radii.push(r);
-        r += step;
-      }
-      radii.push(roughR);
-    }
+    // First radius also clears the centre (a cutter orbiting at 0.45 D covers it); then out to the last
+    // roughing radius in even steps, so no two helices land on the same circle.
+    const first = Math.min(roughR, p.cutterDiameter * 0.45);
+    const radii = spread(first, roughR, step);
     for (const [ci, c] of p.centers.entries()) {
-      em.comment(`hole ${ci + 1} at X${fmt(c.x)} Y${fmt(c.y)}: ${radii.length} roughing radius/radii`);
+      em.comment(`hole ${ci + 1} at X${fmt(c.x)} Y${fmt(c.y)}: ${radii.length} roughing pass(es)${p.finishPass && finalR > roughR ? " + finish" : ""}`);
       helixHole(em, p, c, radii, p.depth, p.pitch, p.topZ, p.climb);
       if (p.finishPass && finalR > roughR) {
-        em.comment("finish pass");
-        helixHole(em, p, c, [finalR], p.depth, Math.max(p.pitch, p.depth), p.topZ, p.climb);
+        // Same helix at the final radius: a light radial cut down the whole wall, not one full-depth turn.
+        em.comment(`finish pass at Ø${fmt(p.diameter)} (${fmt(p.finishAllowance)} mm radial)`);
+        helixHole(em, p, c, [finalR], p.depth, p.pitch, p.topZ, p.climb);
       }
     }
     return { name: `hole-D${fmt(p.diameter)}x${fmt(p.depth)}`, lines: em.finish(), warnings: em.warnings };
@@ -245,15 +265,15 @@
     const [a0, a1, b0, b1] = alongX ? [p.x0, p.x1, p.y0, p.y1] : [p.y0, p.y1, p.x0, p.x1];
     const start = a0 - p.overhang;
     const end = a1 + p.overhang;
-    const rows: number[] = [];
-    for (let b = b0; b < b1 - 0.01; b += step) rows.push(b);
-    rows.push(b1);
+    // Evenly spread rows: the actual stepover is the requested one or slightly less, and the last row can
+    // never coincide with the one before it (which is what put two cuts on the same line).
+    const rows = spread(b0, b1, step);
     const zPasses = Math.max(1, Math.ceil(p.totalDepth / p.depthPerPass));
     const clearance = p.topZ + 2;
     const pt = (a: number, b: number): Point => (alongX ? { x: a, y: b } : { x: b, y: a });
     for (let zi = 1; zi <= zPasses; zi += 1) {
       const z = Math.max(p.topZ - p.totalDepth, p.topZ - zi * p.depthPerPass);
-      em.comment(`Z pass ${zi} of ${zPasses} at Z${fmt(z)}`);
+      em.comment(`Z pass ${zi} of ${zPasses} at Z${fmt(z)}: ${rows.length} rows ${fmt(rows.length > 1 ? Math.abs(rows[1]! - rows[0]!) : 0)} mm apart`);
       let forward = true;
       for (const [ri, b] of rows.entries()) {
         const from = forward ? start : end;
@@ -276,12 +296,17 @@
     from: Point;
     to: Point;
     rapid: boolean;
+    /** Z at the middle of the segment: a top view alone cannot show a helix, so the drawing shades by depth. */
+    z: number;
+    /** Distance along the dominant axis, for the side elevation. */
+    a: number;
   }
   /** Interprets the generator's own output (absolute XY, IJ arcs) into flat segments for the canvas. */
   function toSegments(lines: string[]): Seg[] {
     const segs: Seg[] = [];
     let x = 0;
     let y = 0;
+    let z = 0;
     for (const raw of lines) {
       const code = raw.replace(/\([^)]*\)/g, "").trim().toUpperCase();
       if (!code) continue;
@@ -293,6 +318,7 @@
       };
       const nx = word("X") ?? x;
       const ny = word("Y") ?? y;
+      const nz = word("Z") ?? z;
       if (g === "2" || g === "3") {
         const i = word("I") ?? 0;
         const j = word("J") ?? 0;
@@ -308,69 +334,124 @@
         const steps = Math.max(8, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 24)));
         let px = x;
         let py = y;
+        let pz = z;
         for (let s = 1; s <= steps; s += 1) {
           const a = a0 + ((a1 - a0) * s) / steps;
           const qx = cx + r * Math.cos(a);
           const qy = cy + r * Math.sin(a);
-          segs.push({ from: { x: px, y: py }, to: { x: qx, y: qy }, rapid: false });
+          const qz = z + ((nz - z) * s) / steps; // helical arcs carry a Z word
+          segs.push({ from: { x: px, y: py }, to: { x: qx, y: qy }, rapid: false, z: (pz + qz) / 2, a: qx });
           px = qx;
           py = qy;
+          pz = qz;
         }
-        a0 = a1;
-      } else if (nx !== x || ny !== y) segs.push({ from: { x, y }, to: { x: nx, y: ny }, rapid: g === "0" });
+      } else if (nx !== x || ny !== y || nz !== z) segs.push({ from: { x, y }, to: { x: nx, y: ny }, rapid: g === "0", z: (z + nz) / 2, a: nx });
       x = nx;
       y = ny;
+      z = nz;
     }
     return segs;
   }
+  /**
+   * Two views, because a helix seen from above is just a circle: the top view shades cutting moves by depth
+   * (pale at the surface, dark at the deepest cut) and the elevation below plots the same moves against Z, so
+   * a thread's turns, a hole's ramp and a facing pass's step-downs are all visible. Rapids are dashed grey.
+   */
   function Preview({ lines }: { lines: string[] }): React.JSX.Element {
-    const ref = React.useRef<HTMLCanvasElement>(null);
+    const top = React.useRef<HTMLCanvasElement>(null);
+    const side = React.useRef<HTMLCanvasElement>(null);
     React.useEffect(() => {
-      const canvas = ref.current;
-      const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = 300 * dpr;
-      canvas.height = 300 * dpr;
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, 300, 300);
       const segs = toSegments(lines);
-      if (!segs.length) return;
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const s of segs) for (const q of [s.from, s.to]) {
-        minX = Math.min(minX, q.x);
-        maxX = Math.max(maxX, q.x);
-        minY = Math.min(minY, q.y);
-        maxY = Math.max(maxY, q.y);
-      }
-      const span = Math.max(maxX - minX, maxY - minY, 1);
-      const scale = 270 / span;
-      const ox = 15 + (270 - (maxX - minX) * scale) / 2;
-      const oy = 15 + (270 - (maxY - minY) * scale) / 2;
-      const tx = (v: number): number => ox + (v - minX) * scale;
-      const ty = (v: number): number => 300 - (oy + (v - minY) * scale);
       const dark = document.documentElement.getAttribute("data-theme") === "dark";
-      for (const rapid of [true, false]) {
-        ctx.beginPath();
-        ctx.strokeStyle = rapid ? (dark ? "#777" : "#bbb") : dark ? "#4ade80" : "#0f766e";
-        ctx.setLineDash(rapid ? [3, 3] : []);
+      const rapidColour = dark ? "#777" : "#bbb";
+      const bounds = (values: number[]): [number, number] => [Math.min(...values), Math.max(...values)];
+      const prepare = (canvas: HTMLCanvasElement | null, w: number, h: number): CanvasRenderingContext2D | null => {
+        const ctx = canvas?.getContext("2d");
+        if (!canvas || !ctx) return null;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        ctx.font = "10px system-ui";
         ctx.lineWidth = 1;
-        for (const s of segs) {
-          if (s.rapid !== rapid) continue;
-          ctx.moveTo(tx(s.from.x), ty(s.from.y));
-          ctx.lineTo(tx(s.to.x), ty(s.to.y));
+        return ctx;
+      };
+      const label = (ctx: CanvasRenderingContext2D, text: string, y: number): void => {
+        ctx.setLineDash([]);
+        ctx.fillStyle = dark ? "#aaa" : "#666";
+        ctx.fillText(text, 6, y);
+      };
+
+      /* ---------------------------------------------------------------- top view */
+      const topCtx = prepare(top.current, 300, 300);
+      const cutting = segs.filter((seg) => !seg.rapid);
+      const [zMin, zMax] = cutting.length ? bounds(cutting.map((seg) => seg.z)) : [0, 0];
+      /** Pale near the top of the cut, dark at the deepest point; one colour when everything is at one Z. */
+      const depthColour = (z: number): string => {
+        const t = zMax - zMin > 1e-6 ? (zMax - z) / (zMax - zMin) : 0;
+        const light = dark ? 70 - t * 35 : 62 - t * 38;
+        return `hsl(${dark ? 145 : 176} 55% ${light}%)`;
+      };
+      if (topCtx && segs.length) {
+        const [minX, maxX] = bounds(segs.flatMap((seg) => [seg.from.x, seg.to.x]));
+        const [minY, maxY] = bounds(segs.flatMap((seg) => [seg.from.y, seg.to.y]));
+        const span = Math.max(maxX - minX, maxY - minY, 1);
+        const scale = 270 / span;
+        const ox = 15 + (270 - (maxX - minX) * scale) / 2;
+        const oy = 15 + (270 - (maxY - minY) * scale) / 2;
+        const tx = (v: number): number => ox + (v - minX) * scale;
+        const ty = (v: number): number => 300 - (oy + (v - minY) * scale);
+        topCtx.setLineDash([3, 3]);
+        topCtx.strokeStyle = rapidColour;
+        topCtx.beginPath();
+        for (const seg of segs) {
+          if (!seg.rapid) continue;
+          topCtx.moveTo(tx(seg.from.x), ty(seg.from.y));
+          topCtx.lineTo(tx(seg.to.x), ty(seg.to.y));
         }
-        ctx.stroke();
+        topCtx.stroke();
+        topCtx.setLineDash([]);
+        // Deepest last, so the floor of a pocket reads on top of the passes that got there.
+        for (const seg of [...cutting].sort((a, b) => b.z - a.z)) {
+          topCtx.strokeStyle = depthColour(seg.z);
+          topCtx.beginPath();
+          topCtx.moveTo(tx(seg.from.x), ty(seg.from.y));
+          topCtx.lineTo(tx(seg.to.x), ty(seg.to.y));
+          topCtx.stroke();
+        }
+        label(topCtx, `top · X ${fmt(minX)} … ${fmt(maxX)}   Y ${fmt(minY)} … ${fmt(maxY)}`, 294);
       }
-      ctx.setLineDash([]);
-      ctx.fillStyle = dark ? "#aaa" : "#666";
-      ctx.font = "10px system-ui";
-      ctx.fillText(`X ${fmt(minX)} … ${fmt(maxX)}   Y ${fmt(minY)} … ${fmt(maxY)}`, 6, 294);
+
+      /* --------------------------------------------------------------- elevation */
+      const sideCtx = prepare(side.current, 300, 120);
+      if (sideCtx && segs.length) {
+        const [minA, maxA] = bounds(segs.flatMap((seg) => [seg.from.x, seg.to.x]));
+        const [minZ, maxZ] = bounds(segs.flatMap((seg) => [seg.z]));
+        const sx = 280 / Math.max(1e-6, maxA - minA || 1);
+        const sz = 78 / Math.max(1e-6, maxZ - minZ || 1);
+        const ax = (v: number): number => 10 + (v - minA) * sx;
+        const az = (v: number): number => 96 - (v - minZ) * sz;
+        for (const rapid of [true, false]) {
+          sideCtx.setLineDash(rapid ? [3, 3] : []);
+          sideCtx.strokeStyle = rapid ? rapidColour : dark ? "#4ade80" : "#0f766e";
+          sideCtx.beginPath();
+          for (const seg of segs) {
+            if (seg.rapid !== rapid) continue;
+            sideCtx.moveTo(ax(seg.from.x), az(seg.z));
+            sideCtx.lineTo(ax(seg.to.x), az(seg.z));
+          }
+          sideCtx.stroke();
+        }
+        label(sideCtx, `front · Z ${fmt(minZ)} … ${fmt(maxZ)}`, 114);
+      }
     }, [lines]);
-    return <canvas ref={ref} className="usermod-cyc-canvas" width={300} height={300} />;
+    return (
+      <div>
+        <canvas ref={top} className="usermod-cyc-canvas" width={300} height={300} />
+        <canvas ref={side} className="usermod-cyc-canvas usermod-cyc-side" width={300} height={120} />
+      </div>
+    );
   }
 
   /* --------------------------------------------------------------- the form */
@@ -641,5 +722,4 @@
     ui.react.modal("Cycles", <Dialog initialTab={tab} />, { width: 900 });
   }
   ui.toolbar.addButton({ id: "cycles", title: "Cycles", icon: () => ui.icons.svg("M9 2h6v3H9V2zm0 5h6v3H9V7zm0 5h6v3H9v-3zm0 5h6v2l-3 3-3-3v-2z"), order: 15, onClick: () => open() });
-  window.usermodCycles = { open };
 })();

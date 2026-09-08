@@ -11,6 +11,13 @@
   const ui = window.usermodUI;
   rt.register({ name: "tool-change", version: "0.2.0" });
 
+  /** The touch-plate wizard, when the work-zero mod is on to provide it. */
+  interface Probe {
+    run(): Promise<void>;
+    enabled(): boolean;
+  }
+  const probe = (): Probe | null => ui.consume<Probe>("probe");
+
   interface State {
     phase: string;
     line: number | null;
@@ -69,12 +76,12 @@
       rt.el("div", { class: "usermod-sub", text: `${s.job.fileName ?? "Program"} is holding at line ${s.line} (tool change at line ${change.line}). Change the bit, check the length offset, then resume.` }),
       ui.buttonRow([
         ui.button(`Resume (${settings.resumeCommand})`, resume, { primary: true }),
-        // Offered when the z-probe mod is on: re-zero Z for the new bit, then resume.
-        window.usermodZProbe?.enabled()
+        // Offered when the work-zero mod is on to provide it: re-zero Z for the new bit, then resume.
+        probe()?.enabled() === true
           ? ui.button("Probe Z, then resume", async () => {
-            const probe = window.usermodZProbe;
-            if (!probe) return;
-            await probe.run();
+            const wizard = probe();
+            if (!wizard) return;
+            await wizard.run();
             const state = await window.usermod.invoke<Usermod.MachineState>("machine:state");
             if (state.ok && state.data.phase === "paused") await resume();
           }, { title: "Runs the touch-plate wizard; resumes only when probing finished with the program still held" })

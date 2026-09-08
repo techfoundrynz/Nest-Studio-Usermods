@@ -131,46 +131,31 @@ function loadConfig(): Usermod.Config {
   }
   return state.config;
 }
-/* Mods that were folded into others keep working from an old mods.json: the old name enables the new mod and its
- * settings are carried over (renamed where the merged mod uses different keys). The file is rewritten once. */
+/*
+ * Renaming or merging a mod would otherwise orphan its mods.json entry. An entry here maps an old mod name
+ * onto the current one: the old name enables the new mod, its settings are carried over (renamed where the
+ * new mod uses different keys) and the file is rewritten once, with a line in usermod.log.
+ *
+ * Empty on purpose. Nothing has shipped to anyone yet, so the names in this repo are simply the names; add
+ * an entry the next time one of them changes under someone's feet, for example:
+ *
+ *   "old-name": { into: "new-name", settings: (old, wasEnabled) => ({ feature: wasEnabled, ...pick(old, { oldKey: "newKey" }) }) }
+ */
 interface Migration {
   into: string;
+  /** `wasEnabled` lets a merged feature start switched on only if its old mod was. */
   settings(old: Record<string, unknown>, wasEnabled: boolean): Record<string, unknown>;
 }
+/** Copies just the listed keys, renaming as it goes; the usual building block for a migration's settings(). */
 const pick = (o: Record<string, unknown>, map: Record<string, string>): Record<string, unknown> => Object.fromEntries(Object.entries(map).filter(([from]) => o[from] !== undefined).map(([from, to]) => [to, o[from]]));
-const MIGRATIONS: Record<string, Migration> = {
-  "keyboard-jog": { into: "jog", settings: (o, on) => ({ keyboardEnabled: on, ...pick(o, { feed: "keyboardFeed", zFeed: "keyboardZFeed", distance: "keyboardDistance", requireDeviceTab: "requireDeviceTab" }) }) },
-  "gamepad-jog": { into: "jog", settings: (o) => pick(o, { maxFeed: "gamepadMaxFeed", zFeed: "gamepadZFeed", deadzone: "deadzone", invertY: "invertY", stepMs: "stepMs", requireDeviceTab: "requireDeviceTab" }) },
-  "depth-guard": { into: "export", settings: (o) => ({ ...o }) },
-  "dev-shortcuts": { into: "app-tools", settings: (o) => ({ shortcuts: true, reloadShortcut: o.reload !== false }) },
-  "strip-comments": { into: "gcode-format", settings: (o, on) => ({ stripComments: on, ...pick(o, { keepHeader: "keepHeader", removeBlankLines: "removeBlankLines" }) }) },
-  "line-numbers": { into: "gcode-format", settings: (o, on) => ({ lineNumbers: on, ...pick(o, { start: "start", step: "step", skipComments: "skipComments" }) }) },
-  "job-notifier": { into: "jobs", settings: (o) => ({ ...o }) },
-  "job-history": { into: "jobs", settings: (o) => ({ ...o }) },
-  "feed-override": { into: "feed-scale", settings: (o) => ({ ...o }) },
-  "live-override": { into: "overrides", settings: (o) => ({ ...o }) },
-  "tool-visual": { into: "cutter", settings: (o) => ({ ...o }) },
-  "camera-timelapse": { into: "timelapse", settings: (o) => ({ ...o }) },
-  "tool-change-guard": { into: "tool-change", settings: (o) => ({ ...o }) },
-  "tool-change-assistant": { into: "tool-change", settings: (o) => ({ ...o }) },
-  "export-report": { into: "export", settings: (o) => ({ ...o }) },
-  "export-copy": { into: "export", settings: (o) => pick(o, { targetDir: "copyTo", subfolderByDate: "copySubfolderByDate", overwrite: "copyOverwrite" }) },
-  "export-filename": { into: "export", settings: (o) => pick(o, { template: "template", targetDir: "saveDir" }) },
-  "tool-library": { into: "tools", settings: (o) => ({ ...o }) },
-  "feeds-speeds": { into: "tools", settings: (o) => ({ ...o }) },
-  "work-offsets": { into: "work-zero", settings: (o) => ({ ...o }) },
-  "z-probe": { into: "work-zero", settings: (o) => ({ ...o }) },
-  "iso-view": { into: "view", settings: (o) => ({ ...o }) },
-  "toolpath-color": { into: "view", settings: (o) => ({ ...o }) },
-  "dark-mode": { into: "appearance", settings: (o) => ({ ...o }) },
-  "ui-scale": { into: "appearance", settings: (o) => ({ ...o }) },
-  "status-hud": { into: "jobs", settings: (o) => ({ hud: true, ...pick(o, { position: "hudPosition", showWhenDisconnected: "hudWhenDisconnected" }) }) }
-};
-function migrateConfig(config: Usermod.Config, rawFile: Record<string, unknown>): Usermod.Config {
-  let changed = false;
+const MIGRATIONS: Record<string, Migration> = {};
+
+/** The rename itself, with no file access, so it can be exercised on its own. */
+function applyMigrations(config: Usermod.Config, migrations: Record<string, Migration>): { config: Usermod.Config; changed: string[] } {
+  const changed: string[] = [];
   const enabled = new Set(config.enabled);
   const settings = { ...config.settings };
-  for (const [oldName, migration] of Object.entries(MIGRATIONS)) {
+  for (const [oldName, migration] of Object.entries(migrations)) {
     const wasEnabled = enabled.has(oldName);
     const oldSettings = settings[oldName];
     if (!wasEnabled && !oldSettings) continue;
@@ -180,13 +165,17 @@ function migrateConfig(config: Usermod.Config, rawFile: Record<string, unknown>)
       enabled.delete(oldName);
       enabled.add(migration.into);
     }
-    changed = true;
-    log("info", `mods.json: "${oldName}" is now part of "${migration.into}"; settings carried over`);
+    changed.push(`${oldName} -> ${migration.into}`);
   }
-  if (!changed) return config;
-  const next: Usermod.Config = { enabled: [...enabled].sort(), settings };
+  return { config: { enabled: [...enabled].sort(), settings }, changed };
+}
+function migrateConfig(config: Usermod.Config, rawFile: Record<string, unknown>): Usermod.Config {
+  const { config: next, changed } = applyMigrations(config, MIGRATIONS);
+  if (!changed.length) return config;
+  for (const move of changed) log("info", `mods.json: ${move} (renamed or merged mod); settings carried over`);
   try {
-    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify({ ...rawFile, enabled: next.enabled, settings: next.settings }, null, 2)}\n`, "utf8");
+    fs.writeFileSync(CONFIG_FILE, `${JSON.stringify({ ...rawFile, enabled: next.enabled, settings: next.settings }, null, 2)}
+`, "utf8");
   } catch (error) {
     recordError("config-migrate", error);
   }
@@ -732,4 +721,4 @@ try {
   recordError("startup", error);
 }
 
-export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR, CONFIG_FILE };
+export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR, CONFIG_FILE, applyMigrations };

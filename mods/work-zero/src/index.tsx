@@ -376,7 +376,8 @@
 
       let offer = DEFAULTS.offerAtToolChange;
       void settings().then((s) => (offer = s.offerAtToolChange));
-      window.usermodZProbe = { run: () => open(), enabled: () => offer };
+      // Offered to other mods (tool-change asks for it when the machine holds at a change).
+      ui.provide("probe", { run: () => open(), enabled: () => offer });
     tabs.push({ id: "probe", label: "Probe Z", open: (body, close) => ui.react.mount(body, <Wizard close={close} />) });
   })();
 
@@ -410,10 +411,9 @@
 
   ui.toolbar.addButton({
     id: "work-zero",
-    title: "Work zero: offsets and probing",
+    title: "Offsets and probing",
     icon: () => ui.icons.svg("M12 2a1 1 0 0 1 1 1v2.06A7 7 0 0 1 18.94 11H21a1 1 0 1 1 0 2h-2.06A7 7 0 0 1 13 18.94V21a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 13H3a1 1 0 1 1 0-2h2.06A7 7 0 0 1 11 5.06V3a1 1 0 0 1 1-1zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"),
     order: 43,
     onClick: () => openWindow()
   });
-  window.usermodWorkZero = { open: openWindow };
 })();

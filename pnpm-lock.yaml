@@ -156,6 +156,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
 
+  mods/feeds-speeds:
+    devDependencies:
+      '@neststudio-usermods/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.7(@types/react@19.2.18)
+
   mods/final-geometry:
     devDependencies:
       '@neststudio-usermods/types':

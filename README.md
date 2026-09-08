@@ -110,7 +110,7 @@ mods/
   feed-scale, arc-fit, tool-change, program-header, safe-shutdown, peck-drill, gcode-format,
   tool-split, export                                                                        (post-processors)
   mods-menu, appearance, view, bed-size, jog, work-zero, overrides, device-macros, tools,
-  cycles, gcode-lab, cutter                                                                 (UI)
+  cycles, gcode-lab, cutter, feeds-speeds                                                   (UI)
   machine-state, timelapse, project-backup                                                  (main)
   app-tools, jobs, lan-monitor, final-geometry, toolpath-modifiers, export                   (main/post + UI)
 mods.default.json   tracked template: enabled list (empty) + default settings
@@ -149,7 +149,8 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `lan-monitor` | main + ui | Read-only status page on the local network with progress, ETA and the latest camera frame |
 | `machine-state` | main | Shared machine status, positions, WCS, feed / spindle, progress and ETA (`machine:state`) for the other mods |
 | `timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
-| `tools` | ui | Tool library export / import as JSON and the chip-load feeds & speeds calculator |
+| `tools` | ui | Tool library export / import as JSON, resolving id and slot clashes |
+| `feeds-speeds` | ui | Chip-load feeds and speeds calculator per material, against the tool library, with favourites |
 | `cycles` | ui | Cycle generators: thread milling, helical hole milling and spoilboard surfacing, with preview, validation and export |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via the chain |
 | `cutter` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper / V, drill) |

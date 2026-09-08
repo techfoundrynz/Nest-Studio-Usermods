@@ -96,7 +96,7 @@
       const key = event.key.toUpperCase();
       if (key === "M") {
         event.preventDefault();
-        void window.usermodMenu?.toggle();
+        void ui.consume<{ toggle(): Promise<void> }>("mods-menu")?.toggle();
       } else if (key === "R" && shortcuts.reload) {
         event.preventDefault();
         rt.toast("Reloading renderer…");

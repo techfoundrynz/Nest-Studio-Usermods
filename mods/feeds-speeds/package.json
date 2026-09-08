@@ -1,14 +1,14 @@
 {
-  "name": "@neststudio-mods/tools",
+  "name": "@neststudio-mods/feeds-speeds",
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Tool library: export the tools you pick to JSON and import them back, resolving id and slot clashes",
+  "description": "Chip-load feeds and speeds calculator per material, against the tool library, with saved favourites",
   "usermod": {
-    "name": "tools",
+    "name": "feeds-speeds",
     "ui": "dist/index.js",
-    "order": 36,
-    "description": "Tool library: export the tools you pick to JSON and import them back, resolving id and slot clashes"
+    "order": 37,
+    "description": "Chip-load feeds and speeds calculator per material, against the tool library, with saved favourites"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

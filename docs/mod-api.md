@@ -98,6 +98,7 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 | `toolbar.addButton({ id, title, icon, onClick, order, pinned })` | button in the app bar right after the Settings gear, styled like it; returns a handle with `setIcon`, `setTitle`, `setBadge`, `remove` |
 | `toolbar.setMaxVisible(n)` / `maxVisible()` / `setOrder(ids)` / `order()` / `setPinned(ids)` / `entries()` | how many icons stay in the bar (default 5) and in what order; `entries()` reports position and visibility |
 | `menu(anchor, items, { width, align })` | popover of clickable rows (`{ label, onClick, icon, title, hint, disabled }`, or `{ heading }` to group); the toolbar's overflow menu is one of these |
+| `provide(name, api)` / `consume<T>(name)` / `provided()` | the one place mods reach each other (see below); nothing goes on `window` |
 | `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
 | `modal(title, { width, onClose })` | centred dialog (`{ root, body, close, isOpen }`) |
 | `button(label, onClick, { primary, title, disabled })`, `buttonRow([...])` | buttons; async errors become toasts |
@@ -110,7 +111,7 @@ Styles key off the app's `html[data-theme]`, so kit UI follows the app's light/d
 
 **One icon per mod.** Every bundled mod with UI registers exactly one toolbar button, and that button either
 opens the mod's UI or performs its action, never both. A mod with several actions (app-tools) opens `ui.menu`
-from its button; a mod with several panels (tools, work-zero, view) opens a window with a tab per panel. The
+from its button; a mod with several panels (work-zero) opens a window with a tab per panel, and `view` stacks its sections in one window. The
 bar shows at most `toolbar.maxVisible()` usermod icons
 (default 5, from `mods.json` `settings.mods-menu.toolbarMaxVisible`) and collapses the rest into an ellipsis
 button whose menu lists the hidden mods plus any legacy `rt.menu.addAction` entries.
@@ -126,6 +127,27 @@ const handle = ui.toolbar.addButton({ id: "hello", title: "Hello", icon: ui.icon
   p.body.append(ui.section("Hello", ui.kv([["Route", location.hash]])), ui.settingsForm("hello", { fields: [{ key: "loud", label: "Loud", type: "boolean" }] }));
 } });
 ```
+
+### Mods reaching each other: `ui.provide` / `ui.consume`
+
+A mod that wants to offer something to the others publishes it under a name it owns, and the other looks it
+up when it needs it:
+
+```ts
+// work-zero
+ui.provide("probe", { run: () => openWizard(), enabled: () => offerAtToolChange });
+
+// tool-change, when the machine holds at a change
+interface Probe { run(): Promise<void>; enabled(): boolean }
+const probe = ui.consume<Probe>("probe");   // null when work-zero is switched off
+```
+
+The registry lives in the kit, not on `window`, so no mod's private handle appears in the shared `Window`
+interface: that stays down to the four things every renderer script gets (`usermodRuntime`, `usermodUI`,
+`usermod`, `api`) plus the globals the installer patches into the app itself. Like `usermod.invoke<T>` and
+`api.call<T>` in the main process, the caller names the shape it expects, and `null` means that mod is not
+running. `ui.provided()` lists what is published. Only two links exist today: mods-menu publishes its panel
+for app-tools's `Ctrl+Shift+M`, and work-zero publishes the probe wizard for tool-change.
 
 ### `window.usermod` (`Usermod.Bridge`)
 
@@ -266,13 +288,14 @@ type `machine_status` carry `status` (`Idle`, `Run`, `Hold`, `Alarm`, …) and t
 Bundled: `app-tools` (`tools:ping`, `tools:open-logs`, `tools:open-userdata`, `tools:open-usermod-log`,
 `tools:open-url` (loopback only), `tools:cam-status`, `tools:tool-library`) and `jobs` (`jobs:status`,
 `jobs:test`, `jobs:reload-settings`, `jobs:list`, `jobs:clear`, `jobs:export-csv`, `jobs:open`; emits
-`jobs:event` and `jobs:changed` to the UI). Mods that were merged (keyboard-jog + gamepad-jog into jog,
-depth-guard + export-copy + export-filename + export-report into export, dev-shortcuts into app-tools,
-strip-comments + line-numbers into gcode-format, job-notifier + job-history + status-hud into jobs, dark-mode +
-ui-scale into appearance, iso-view + toolpath-color into view, work-offsets + z-probe into work-zero,
-tool-library + feeds-speeds into tools, tool-change-guard + tool-change-assistant into tool-change, and the
-renames feed-override to feed-scale, live-override to overrides, tool-visual to cutter, camera-timelapse to timelapse) are migrated from an old mods.json automatically: the old name enables
-the new mod and its settings are carried over.
+`jobs:event` and `jobs:changed` to the UI).
+
+Renaming or merging a mod would orphan its `mods.json` entry, so the loader carries a migration table
+(`MIGRATIONS` in `packages/loader/src/main.ts`) mapping an old mod name onto the current one: the old name
+enables the new mod, its settings are carried over (`pick()` renames keys), and the file is rewritten once
+with a line in `usermod.log`. The table is deliberately empty, because nothing has shipped to anyone yet; add
+an entry the next time a name changes under someone's feet. `applyMigrations()` is the pure half and is what
+the test harness exercises.
 
 ## Loader internals
 

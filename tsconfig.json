@@ -44,6 +44,9 @@
       "path": "./mods/feed-scale/tsconfig.json"
     },
     {
+      "path": "./mods/feeds-speeds/tsconfig.json"
+    },
+    {
       "path": "./mods/final-geometry/tsconfig.main.json"
     },
     {
