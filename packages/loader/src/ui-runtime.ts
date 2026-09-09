@@ -93,6 +93,9 @@
   /* Modal: closes on backdrop click or Escape. */
   function modal(title: string, { width = 720, onClose }: Usermod.ModalOptions = {}): Usermod.ModalHandle {
     const body = el("div", { class: "usermod-modal-body" });
+    /* Sits below the scrolling body like the header sits above it, so Save and Cancel stay put however long
+     * the content gets. It stays out of the way until a mod puts something in it (CSS hides it while empty). */
+    const footer = el("div", { class: "usermod-modal-foot" });
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape") close();
     };
@@ -105,14 +108,20 @@
       onClose?.();
     };
     const root = el("div", { class: "usermod-modal-backdrop", onMousedown: (event: MouseEvent) => event.target === root && close() }, [
-      el("div", { class: "usermod-modal", role: "dialog", style: { width: `${width}px` } }, [
+      /*
+       * `width` is the width the mod asks for, not a ceiling: the dialog sizes itself to its content and only
+       * starts scrolling once that content would pass 90% of the window. A wide table therefore widens the
+       * dialog instead of putting the whole of it, header and buttons included, on a horizontal scrollbar.
+       */
+      el("div", { class: "usermod-modal", role: "dialog", style: { minWidth: `min(${width}px, 90vw)` } }, [
         el("div", { class: "usermod-modal-head" }, [el("h3", { text: title }), el("button", { class: "usermod-modal-close", text: "×", title: "Close", onClick: close })]),
-        body
+        body,
+        footer
       ])
     ]);
     document.addEventListener("keydown", onKey);
     document.body.appendChild(root);
-    return { root, body, close, isOpen: () => open };
+    return { root, body, footer, close, isOpen: () => open };
   }
 
   addStyle(
@@ -120,11 +129,17 @@
      .usermod-toast{background:#1f1f1f;color:#fff;padding:8px 12px;border-radius:6px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:.95}
      .usermod-toast-error{background:#9b1c1c}.usermod-toast-warn{background:#8a5a00}.usermod-toast-success{background:#166534}
      .usermod-modal-backdrop{position:fixed;inset:0;z-index:2147482000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
-     .usermod-modal{max-width:95vw;max-height:88vh;display:flex;flex-direction:column;background:#fff;color:#111;border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.4);font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+     .usermod-modal{width:max-content;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;background:#fff;color:#111;border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.4);font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
      .usermod-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb}
      .usermod-modal-head h3{margin:0;font-size:15px}
      .usermod-modal-close{background:transparent;border:0;font-size:22px;line-height:1;cursor:pointer;color:#666;padding:0 4px}
      .usermod-modal-body{padding:14px 16px;overflow:auto}
+     /* Pinned action bar, hidden while it holds nothing, so every existing modal looks exactly as it did. */
+     .usermod-modal-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #e5e7eb}
+     .usermod-modal-foot:empty{display:none}
+     /* Prose would otherwise lay itself out on one long line and decide the dialog's natural width, so cap the
+        width a run of text is allowed to contribute and let a real table be the thing that widens it. */
+     .usermod-modal-body .usermod-sub,.usermod-modal-body p,.usermod-modal-body .usermod-err,.usermod-modal-body .usermod-ok{max-width:68ch}
      .usermod-btn{background:#eef0f3;border:0;border-radius:6px;padding:6px 10px;font:12px system-ui,sans-serif;cursor:pointer;color:#111}
      .usermod-btn:hover{background:#dfe3e8}.usermod-btn:disabled{opacity:.5;cursor:default}
      .usermod-btn-primary{background:#0f766e;color:#fff}.usermod-btn-primary:hover{background:#0d5f59}

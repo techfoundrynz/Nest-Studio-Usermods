@@ -30,16 +30,34 @@ function mount(container: Element, element: React.ReactNode): () => void {
 /** Unmount after the current event/render finished: closing from inside a click handler is common. */
 const unmountLater = (unmount: () => void): void => void setTimeout(unmount, 0);
 
-function modal(title: string, element: React.ReactNode, { width, onClose }: Usermod.ModalOptions = {}): Usermod.ModalHandle {
+/*
+ * The pinned footer, reachable from anywhere inside the modal's own tree. A modal's buttons usually need the
+ * state that lives beside them (what is selected, whether the form is valid), so rather than asking a mod to
+ * render a second, separate tree, ModalFooter portals its children out of the body and into the pinned bar
+ * while leaving them where they are in the React tree. Outside a kit modal it renders nothing.
+ */
+const ModalFooterContext = React.createContext<HTMLElement | null>(null);
+const ModalFooter: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+  const host = React.useContext(ModalFooterContext);
+  return host ? ReactDOM.createPortal(children, host) : null;
+};
+interface ReactModalOptions extends Usermod.ModalOptions {
+  /** Rendered into the pinned bar under the body. A function form is handed `close` for the dismiss button. */
+  footer?: React.ReactNode | ((close: () => void) => React.ReactNode);
+}
+function modal(title: string, element: React.ReactNode, { width, onClose, footer }: ReactModalOptions = {}): Usermod.ModalHandle {
   let unmount: () => void = () => undefined;
+  let unmountFooter: () => void = () => undefined;
   const handle = rt.modal(title, {
     width,
     onClose: () => {
       unmountLater(unmount);
+      unmountLater(unmountFooter);
       onClose?.();
     }
   });
-  unmount = mount(handle.body, element);
+  unmount = mount(handle.body, <ModalFooterContext.Provider value={handle.footer}>{element}</ModalFooterContext.Provider>);
+  if (footer !== undefined) unmountFooter = mount(handle.footer, typeof footer === "function" ? footer(handle.close) : footer);
   return handle;
 }
 function popover(anchor: HTMLElement, element: React.ReactNode, options: Usermod.PopoverOptions = {}): Usermod.PopoverHandle {
@@ -228,6 +246,7 @@ export const reactKit: Usermod.ReactKit = {
   version: React.version,
   mount,
   modal,
+  ModalFooter,
   popover,
   Section,
   Sub,

@@ -82,7 +82,7 @@ Classic scripts (an IIFE per file) injected after the UI runtime. Globals are ty
 | `addStyle(css, id)` | inject/replace a style block |
 | `el(tag, props, children)` | typed element builder (`class`, `text`, `html`, `style`, `onClick`…) |
 | `toast(msg, { kind, duration })` | `info`, `success`, `warn`, `error` |
-| `modal(title, { width })` | returns `{ root, body, close }`; Escape/backdrop close |
+| `modal(title, { width })` | returns `{ root, body, footer, close }`; Escape/backdrop close. `width` is a floor, not a ceiling: the dialog sizes to its content and caps at 90% of the window. Put action buttons in `footer` and scrolling cannot hide them (it stays invisible while empty) |
 | `menu.addAction({ id, label, section, order, title, icon, onClick({ close, refresh }) })` | legacy: listed in the toolbar overflow menu under its section heading. New mods should own a toolbar button instead |
 | `cam.version()`, `cam.postForm(endpoint, fields)` | CAM service client (`127.0.0.1:9630`) |
 | `formatDuration(s)`, `formatBytes(n)` | formatting helpers |
@@ -100,7 +100,7 @@ helper below has a React twin under `ui.react` (next section); pick whichever fi
 | `menu(anchor, items, { width, align })` | popover of clickable rows (`{ label, onClick, icon, title, hint, disabled }`, or `{ heading }` to group); the toolbar's overflow menu is one of these |
 | `provide(name, api)` / `consume<T>(name)` / `provided()` | the one place mods reach each other (see below); nothing goes on `window` |
 | `popover(anchor, { width, align, onClose })` | dropdown panel under an element; closes on outside click/Escape; one open at a time |
-| `modal(title, { width, onClose })` | centred dialog (`{ root, body, close, isOpen }`) |
+| `modal(title, { width, onClose })` | centred dialog (`{ root, body, footer, close, isOpen }`), content-sized up to 90% of the window |
 | `button(label, onClick, { primary, title, disabled })`, `buttonRow([...])` | buttons; async errors become toasts |
 | `section(title, children)`, `list(items, render, empty)`, `kv(pairs)` | panel building blocks |
 | `toggle(label, checked, onChange, help)`, `select(...)`, `input(...)` | form controls |
@@ -184,7 +184,8 @@ into DOM you own (kit modal / popover bodies, your own elements), never into the
 | Member | Purpose |
 | --- | --- |
 | `mount(container, element)` | render into an element you own; returns an unmount function (one root per container) |
-| `modal(title, element, { width, onClose })`, `popover(anchor, element, options)` | kit containers whose body is a React tree, unmounted automatically on close |
+| `modal(title, element, { width, onClose, footer })`, `popover(anchor, element, options)` | kit containers whose body is a React tree, unmounted automatically on close |
+| `<ModalFooter>` | renders its children into the modal's pinned footer from anywhere inside the modal's tree, so the buttons keep the state that sits next to them; nothing outside a kit modal |
 | `Section`, `Sub`, `KV`, `List`, `Row`, `Mono`, `Err`, `Loading` | layout / display twins of `section`, `kv`, `list`, `buttonRow`… |
 | `Button`, `Toggle`, `Select`, `Input` | controls; `Button` turns async errors into toasts like `ui.button()` |
 | `SettingsForm` | `ui.settingsForm()` as a component (`modName`, `fields`, `reloadPostprocessors`, `onSaved`) |

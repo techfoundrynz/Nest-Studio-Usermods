@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Tool library: export the tools you pick to JSON and import them back, resolving id and slot clashes",
+  "description": "Tool library: export the tools you pick to JSON and import them back, including Fusion 360 .json and .tools libraries, resolving id and slot clashes",
   "usermod": {
     "name": "tools",
     "ui": "dist/index.js",
     "order": 36,
-    "description": "Tool library: export the tools you pick to JSON and import them back, resolving id and slot clashes"
+    "description": "Tool library: export the tools you pick to JSON and import them back, including Fusion 360 .json and .tools libraries, resolving id and slot clashes"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

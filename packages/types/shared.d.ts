@@ -144,6 +144,12 @@ declare namespace Usermod {
   interface ModalHandle {
     root: HTMLElement;
     body: HTMLElement;
+    /**
+     * A bar pinned under the scrolling body, for the buttons that finish the job. Empty by default and hidden
+     * while empty, so a modal that ignores it looks unchanged. Put actions here rather than at the end of the
+     * body and they stay reachable however far the content scrolls.
+     */
+    footer: HTMLElement;
     close(): void;
     isOpen(): boolean;
   }
@@ -372,7 +378,11 @@ declare namespace NestStudio {
     name: string;
     type: string;
     diameter: number;
-    slotNum: number;
+    /**
+     * The physical magazine slot this tool sits in, or null when it is only in the library. The app offers
+     * just the null ones when loading a magazine slot, so anything with a number here reads as already loaded.
+     */
+    slotNum: number | null;
     [key: string]: unknown;
   }
   type Theme = "light" | "dark";
@@ -424,6 +434,8 @@ declare namespace NestStudio {
       /** Replaces the whole user store (store.json). Read, modify, write. */
       write(data: Store): Promise<Result<void>>;
       readFile(filePath: string): Promise<Result<string>>;
+      /** Bytes rather than text, for files that are not UTF-8 (a zip container, say). Null when unreadable. */
+      readBinaryFile(filePath: string): Promise<Result<Uint8Array | null>>;
       /** Goes through the loader's export hook, so post-processors apply to G-code paths. */
       writeFile(filePath: string, data: string): Promise<Result<void>>;
       exists(filePath: string): Promise<Result<boolean>>;

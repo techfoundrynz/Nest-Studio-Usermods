@@ -40,7 +40,7 @@ html[data-theme=dark] .usermod-popover{background:#262626;color:#eee}
 html[data-theme=dark] .usermod-sub,html[data-theme=dark] .usermod-popover .usermod-sub,html[data-theme=dark] .usermod-section>h4,html[data-theme=dark] .usermod-list small,html[data-theme=dark] .usermod-kv dt,html[data-theme=dark] .usermod-field small{color:#aaa}
 html[data-theme=dark] .usermod-field>span.usermod-label{color:#ddd}
 html[data-theme=dark] .usermod-field input[type=text],html[data-theme=dark] .usermod-field input[type=number],html[data-theme=dark] .usermod-field select,html[data-theme=dark] .usermod-field textarea{background:#1c1c1c;color:#eee;border-color:#444}
-html[data-theme=dark] .usermod-modal{background:#262626;color:#eee}html[data-theme=dark] .usermod-modal-head{border-color:#3a3a3a}html[data-theme=dark] .usermod-modal-close{color:#aaa}
+html[data-theme=dark] .usermod-modal{background:#262626;color:#eee}html[data-theme=dark] .usermod-modal-head,html[data-theme=dark] .usermod-modal-foot{border-color:#3a3a3a}html[data-theme=dark] .usermod-modal-close{color:#aaa}
 html[data-theme=dark] .usermod-btn{background:#3a3a3a;color:#eee}html[data-theme=dark] .usermod-btn:hover{background:#4a4a4a}
 html[data-theme=dark] .usermod-btn-primary{background:#0f766e;color:#fff}html[data-theme=dark] .usermod-mono{background:#1c1c1c}
 html[data-theme=dark] .usermod-ok{color:#4ade80}html[data-theme=dark] .usermod-err{color:#f87171}`;

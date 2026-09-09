@@ -150,7 +150,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `lan-monitor` | main + ui | Read-only status page on the local network with progress, ETA and the latest camera frame |
 | `machine-state` | main | Shared machine status, positions, WCS, feed / spindle, progress and ETA (`machine:state`) for the other mods |
 | `timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
-| `tools` | ui | Tool library export / import as JSON, resolving id and slot clashes |
+| `tools` | ui | Tool library export / import as JSON or a Fusion 360 library (`.json` and zipped `.tools`), resolving id and slot clashes |
 | `feeds-speeds` | ui | Chip-load feeds and speeds calculator per material, against the tool library, with favourites |
 | `cycles` | ui | Cycle generators: thread milling, helical hole milling and spoilboard surfacing, with preview, validation and export |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via the chain |

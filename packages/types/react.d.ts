@@ -43,8 +43,21 @@ declare namespace Usermod {
     version: string;
     /** Renders into a container you own; returns an unmount function. One root per container is reused. */
     mount(container: Element, element: React.ReactNode): () => void;
-    /** Kit modal whose body is a React tree; unmounted automatically when the modal closes. */
-    modal(title: string, element: React.ReactNode, options?: ModalOptions): ModalHandle;
+    /**
+     * Kit modal whose body is a React tree; unmounted automatically when the modal closes. Pass `footer` to
+     * put the confirming buttons in the pinned bar under the body, where scrolling cannot hide them. It
+     * receives `close` so a button can dismiss the modal it lives in.
+     */
+    modal(
+      title: string,
+      element: React.ReactNode,
+      options?: ModalOptions & { footer?: React.ReactNode | ((close: () => void) => React.ReactNode) }
+    ): ModalHandle;
+    /**
+     * Renders its children into the modal's pinned footer from anywhere inside the modal's tree, so buttons
+     * can use the state that sits next to them. Renders nothing outside a kit modal.
+     */
+    ModalFooter: React.FC<{ children?: React.ReactNode }>;
     /** Kit popover whose body is a React tree; unmounted automatically when it closes. */
     popover(anchor: HTMLElement, element: React.ReactNode, options?: PopoverOptions): PopoverHandle;
 
