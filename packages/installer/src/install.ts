@@ -71,6 +71,12 @@ const LIT_LOWER = `{\n  x: { min: -238, max: 0 },\n  y: { min: -200, max: 0 },\n
 const PATCHED_LOWER = `{ ${BED_MARKER}\n  get x() { return globalThis.__usermodBed?.X ?? { min: -238, max: 0 }; },\n  get y() { return globalThis.__usermodBed?.Y ?? { min: -200, max: 0 }; },\n  get z() { return globalThis.__usermodBed?.Z ?? { min: -123, max: 0 }; }\n}`;
 const LIT_PLATFORM = "const EDITOR_WORK_PLATFORM_SIZE = 225;";
 const PATCHED_PLATFORM = `const EDITOR_WORK_PLATFORM_SIZE = Number(globalThis.__usermodBedPlatform) > 0 ? Number(globalThis.__usermodBedPlatform) : 225; ${BED_MARKER}`;
+/* Stock-removal simulation: the app ships the material-removal view switched off behind a build constant,
+ * which also hides the Preview tab's toolpath/material toggle. Flipping it on is what lets the final-geometry
+ * mod run the simulation to the end. */
+const STOCKSIM_MARKER = "/* NEST-USERMOD-STOCKSIM */";
+const LIT_STOCKSIM = "const ENABLE_STOCK_REMOVAL_SIMULATION = false;";
+const PATCHED_STOCKSIM = `const ENABLE_STOCK_REMOVAL_SIMULATION = true; ${STOCKSIM_MARKER}`;
 const BUILD_OPTIONS: BuildOption[] = [
   {
     id: "devtools",
@@ -159,6 +165,18 @@ const BUILD_OPTIONS: BuildOption[] = [
     expectedMarkers: 4,
     apply: (s) => s.split(LIT_UPPER).join(PATCHED_UPPER).split(LIT_LOWER).join(PATCHED_LOWER).replace(LIT_PLATFORM, PATCHED_PLATFORM),
     revert: (s) => s.split(PATCHED_UPPER).join(LIT_UPPER).split(PATCHED_LOWER).join(LIT_LOWER).replace(PATCHED_PLATFORM, LIT_PLATFORM)
+  },
+  {
+    id: "stockSim",
+    cli: "stock-sim",
+    label: "Material simulation",
+    description: "Turns on the app's own stock-removal view (the Preview tab gains a toolpath/material toggle). The final-geometry mod needs it to compute anything.",
+    marker: STOCKSIM_MARKER,
+    target: "renderer",
+    assets: /^FullApp-.*\.js$/,
+    expectedMarkers: 1,
+    apply: (s) => s.replace(LIT_STOCKSIM, PATCHED_STOCKSIM),
+    revert: (s) => s.replace(PATCHED_STOCKSIM, LIT_STOCKSIM)
   }
 ];
 const countMarkers = (source: string, marker: string): number => source.split(marker).length - 1;

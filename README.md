@@ -75,6 +75,7 @@ Non-interactive equivalents:
 | `pnpm run install:app -- --install --cam-docs` | build option: start the CAM service with `ENABLE_DOCS=1` so Swagger is at `127.0.0.1:9630/docs` |
 | `pnpm run install:app -- --install --multi-side` | build option: more than two machining sides. Keeps the Flip Setup "+" after the second side and tiles extra flip platforms; generation, preview face switching, per-face export and the machining queue already handle any number |
 | `pnpm run install:app -- --install --bed-size` | build option: let the `bed-size` mod tell the app how much travel the machine really has (it hard-codes X 238, Y 200, Z 123 mm and a 225 mm work platform) |
+| `pnpm run install:app -- --install --stock-sim` | build option: turn on the app's material simulation, which it ships switched off (`ENABLE_STOCK_REMOVAL_SIMULATION = false`). Adds the Preview tab's toolpath/material toggle and is required by `final-geometry` |
 
 Build options are baked into the patched archive. The interactive install asks for them; `--no-devtools` /
 `--no-cam-docs` / `--no-multi-side` turn them off again. The MODS panel shows which ones the installed build
@@ -154,7 +155,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `cycles` | ui | Cycle generators: thread milling, helical hole milling and spoilboard surfacing, with preview, validation and export |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via the chain |
 | `cutter` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper / V, drill) |
-| `final-geometry` | main + ui | Runs the material simulation to the end and compares the machined stock with the model: rest material, overcuts, volumes, STL export |
+| `final-geometry` | main + ui | Runs the material simulation to the end and compares the machined stock with the model: rest material, overcuts, volumes, STL export (needs `--stock-sim`) |
 | `toolpath-modifiers` | main + ui | Runs chosen post-processors as the CAM generates each toolpath, so the Preview tab and the saved project carry the result |
 | `export` | post + main + ui | Everything around an export: save-dialog name template and folder, a stats report with depth / rapid / envelope checks, and an extra copy to a folder |
 | `feed-scale` | post | Scales and clamps `F` and `S` words in the exported program (no-op at factor 1) |

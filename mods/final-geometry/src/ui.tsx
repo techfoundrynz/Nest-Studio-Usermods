@@ -397,7 +397,13 @@
         <h3>Final geometry</h3>
         {!globalThis.__usermodSimRuntimes ? <Err>The simulation-runtime patch is missing: re-run the installer.</Err> : null}
         {!r ? <Sub>Open the Preview tab; the simulation runtime appears with the 3D preview.</Sub> : null}
-        {r && !ready ? <Sub>Turn on the material simulation view in the Preview tab, then compute.</Sub> : null}
+        {r && !sr ? (
+          <Err>
+            The app ships its material simulation switched off, so there is nothing to compute from. Re-run the
+            installer with the "Material simulation" build option (<code>--stock-sim</code>) to turn it on.
+          </Err>
+        ) : null}
+        {r && sr && !ready ? <Sub>Switch the Preview tab to the material view, then compute.</Sub> : null}
         <Row>
           <Input type="number" label="Tolerance (mm)" value={tol} onChange={setTol} step={0.05} />
           <Toggle label="Hide stock outside the model footprint" checked={hideOutside} onChange={setHideOutside} />
