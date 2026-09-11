@@ -2,6 +2,11 @@
   "$comment": "Template for mods.json (which is git-ignored and created from this file on first run). Which mods are enabled is chosen inside Nest Studio: MODS menu -> Mods… . Core mods (mods-menu) always load.",
   "enabled": [],
   "settings": {
+    "pcb-import": {
+      "thicknessMm": 1.6,
+      "engraveDepthMm": 0.1,
+      "toleranceMm": 0.01
+    },
     "program-header": {
       "label": "Nest Studio usermod",
       "includeStats": true

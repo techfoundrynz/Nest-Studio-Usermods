@@ -11,6 +11,13 @@ interface Window {
   api: NestStudio.Api;
 }
 
+/** Installed renderer bridge; resolves only after every successful model is committed. */
+declare var __usermodModelImport: {
+  importFiles(files: File[], progress?: (imported: number, total: number, name: string) => void): Promise<{
+    imported: number; total: number; projectId: string | null; error?: string;
+  }>;
+} | undefined;
+
 /* Minimal view of the app's three.js scene managers, exposed by the installer's scene patch
  * (globalThis.__usermodSceneManagers). Only what view mods need; everything else stays opaque. */
 interface UsermodVector3Like {

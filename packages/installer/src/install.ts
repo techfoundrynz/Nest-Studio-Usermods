@@ -26,6 +26,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import prompts from "prompts";
+import { MODEL_IMPORT_MARKER, patchModelImport } from "./model-import";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const IS_MAC = process.platform === "darwin";
@@ -556,6 +557,15 @@ function patchCsp(file: string): void {
   } else warn("could not find script-src 'self'; in index.html - UI mods may be blocked by CSP");
 }
 
+function patchModelImporter(assetsDir: string): void {
+  const candidates = fs.readdirSync(assetsDir).filter(name => /^FullApp-.*\.js$/.test(name));
+  if (candidates.length !== 1) fail("Expected one FullApp renderer chunk for model import.");
+  const file = path.join(assetsDir, candidates[0]!);
+  fs.writeFileSync(file, patchModelImport(fs.readFileSync(file, "utf8")), "utf8");
+  assertParses(file);
+  step("patched sequential model-import bridge");
+}
+
 /** Read the patches back out of the finished archive so a stale or skipped patch can never be installed. */
 function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archive: string, flags: Flags): void {
   const read = (rel: string): string => asarLib.readEntry(archive, rel).toString("utf8");
@@ -572,6 +582,8 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
     } else if (!main.includes(o.marker)) problems.push(`${o.label} requested but not present`);
   }
   const preload = read("out/preload/index.js");
+  const fullApp = asarLib.list(archive).find(e => /^out\/renderer\/assets\/FullApp-.*\.js$/.test(e.path));
+  if (!fullApp || !read(fullApp.path).includes(MODEL_IMPORT_MARKER)) problems.push("sequential model-import bridge missing");
   if (!preload.includes(PRELOAD_BEGIN) || !preload.includes(PRELOAD_END)) problems.push("preload bridge block missing");
   if (!read("out/renderer/index.html").includes("script-src 'self' file:")) problems.push("CSP file: allowance missing");
   const engine = asarLib.list(archive).find((e) => /^out\/renderer\/assets\/engine-3d-.*\.js$/.test(e.path));
@@ -637,6 +649,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   patchCsp(path.join(STAGING_DIR, "out", "renderer", "index.html"));
   patchScene(path.join(STAGING_DIR, "out", "renderer", "assets"));
   patchRendererOptions(path.join(STAGING_DIR, "out", "renderer", "assets"), flags);
+  patchModelImporter(path.join(STAGING_DIR, "out", "renderer", "assets"));
 
   step("repacking archive");
   const packed = asarLib.pack(sourceAsar, STAGING_DIR, PACKED_ASAR);

@@ -1,6 +1,8 @@
 {
   "files": [],
   "references": [
+    { "path": "./mods/pcb-import/tsconfig.main.json" },
+    { "path": "./mods/pcb-import/tsconfig.ui.json" },
     {
       "path": "./mods/app-tools/tsconfig.json"
     },

@@ -166,6 +166,53 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `gcode-format` | post | Strips comments / blank lines and adds `N` line numbers, each switchable (both off by default) |
 | `tool-split` | post | One extra program file per tool section next to every multi-tool export, each with preamble and safe footer |
 | `project-backup` | main | Timestamped copies of every saved project zip in `data/backups`, newest N kept |
+| `pcb-import` | main + ui | Open or drop Gerber PCB layers (`.grb`, `.gbr`, and common layer extensions) as dimensioned, extruded STL models |
+
+### Gerber PCB import
+
+Enable **pcb-import** in MODS → Enable/disable mods, then restart Nest Studio after rebuilding.
+Automatic multi-board import requires the current installer patch. After updating this repo, close Nest Studio and run `pnpm run install:app -- --install --force` once, then restart. Use **File → Open** or drag a **Gerber ZIP** into the project window.
+Ordinary Nest Studio project ZIPs still use the native project importer. Source files are never changed
+or extracted to disk; the resulting STL models are stored in the project when you save it.
+
+A ZIP should contain one related fabrication set. The importer identifies the outline (`.GKO`, `.GML`,
+`.GM1`, or X2 Profile), top/bottom copper (`.GTL`/`.GBL` or X2 Copper), Excellon drills (`.DRL`/`.XLN`),
+mask, paste (`.GTP`/`.GBP` included), silkscreen and reference files. Nested folders and uppercase
+extensions work. Multiple competing outlines or copper layers are rejected rather than combined.
+
+The import prompt lists the files and asks for **board thickness** (default **1.6 mm**), **engraving
+depth** (default **0.1 mm**), **top/bottom/both copper surfaces**, and whether to **include drill holes**.
+Outline path centerlines define the true board perimeters and cutouts, including rounded corners;
+ZIP imports have **no extra border**. Each separate outline becomes a separate board model, with no
+fixed two-board limit. Copper and drills retain their shared coordinates. Duplicate holes are merged.
+Mask, paste, silkscreen and documentation are identified but do not remove material from the board.
+
+Copper stays at the selected surface; clear areas become recesses. Holes and outline cutouts go through.
+Bottom copper remains on the underside, not mirrored onto the top; configure the machining side in Nest
+Studio. Both-side engraving must leave a solid core. The model does not generate isolation toolpaths,
+set CAM cutting depths, reconstruct components, or infer the material stackup. Depth and thickness are
+always in mm, even when source layers use inches. Configure and verify CAM separately.
+
+After confirming the custom import dialog, **all boards import automatically as separate models**.
+The bridge awaits each native import before starting the next, so it cannot cancel the previous board.
+It reuses the active 3-axis project in Prepare, or creates one 3-axis project for the whole package.
+A progress toast identifies the current board. Cancellation or an import failure stops the batch;
+**PCB import settings → Retry remaining boards** resumes only the boards not successfully added.
+Successfully imported boards remain in the project. An app/UI reload clears pending retries.
+
+Individual `.grb`/`.gbr` and common Gerber layer files still work. Without a package outline, they use
+an inferred rectangular base with a **1 mm border** and an adjustable **board separation gap** (default
+**2 mm**, or **0** to keep the panel together). This splits at empty horizontal/vertical strips, not
+at every isolated copper pad. Increase the gap if a board is divided too much; prefer a ZIP for exact
+board shapes and reliable board grouping. A standalone outline file is treated as artwork, not a package.
+
+The PCB toolbar sets thickness/depth defaults and curve tolerance (default **0.01 mm**). Reimport older
+models to use the new geometry. Parsing uses [tracespace](https://github.com/tracespace/tracespace),
+with polygon composition before triangulation. Aperture blocks/transforms, legacy image transforms,
+ambiguous drill formats, open/branching outlines and clear step-repeat blocks fail explicitly; export
+flattened RS-274X artwork with explicit coordinates/units. ZIP processing is limited to **16 MiB compressed**,
+**8 MiB per fabrication file**, **64 MiB expanded fabrication data**, **512 entries**, **500,000 generated
+polygon points per layer**, **one million total model triangles**, and **30 seconds per worker operation**.
 
 All of these start switched off; enable them from MODS ▸ Enable/disable mods. Settings changes apply after "Reload
 post-processors" in the MODS panel; UI mods after a UI reload (`Ctrl+Shift+R` with app-tools on), main mods at app start.
