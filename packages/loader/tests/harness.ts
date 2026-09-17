@@ -14,11 +14,6 @@ const USER_DATA =
   process.platform === "win32"
     ? String.raw`C:\Users\test\AppData\Roaming\Nest Studio`
     : "/Users/test/Library/Application Support/Nest Studio";
-const arcWelder =
-  process.platform === "darwin"
-    ? "/Applications/Nest Studio.app/Contents/Resources/ArcWelder"
-    : String.raw`C:\Program Files\nest-studio\resources\ArcWelder.exe`;
-if (fs.existsSync(arcWelder) && !process.env.NEST_ARCWELDER) process.env.NEST_ARCWELDER = arcWelder;
 process.env.USERMOD_HARNESS = "1"; // mods that open sockets (lan-monitor) stay quiet under test
 const webContentsHooks: ((event: unknown, contents: unknown) => void)[] = [];
 const syncHandlers = new Map<string, (event: { returnValue?: unknown }) => void>();
@@ -111,22 +106,22 @@ void (async () => {
   check("nothing enabled by default except core", initial.available.filter((m) => m.enabled).every((m) => m.core) && initial.available.some((m) => m.core && m.name === "mods-menu"));
   // The rename/merge machinery carries no entries today, so exercise it directly.
   const moved = loader.applyMigrations(
-    { enabled: ["old-mod", "arc-fit"], settings: { "old-mod": { feed: 1200 }, "arc-fit": { minBytes: 1 } } },
+    { enabled: ["old-mod", "feed-scale"], settings: { "old-mod": { feed: 1200 }, "feed-scale": { feedFactor: 2 } } },
     { "old-mod": { into: "jog", settings: (o, wasEnabled) => ({ keyboardEnabled: wasEnabled, keyboardFeed: o.feed }) } }
   );
   check(
     "config migration renames a mod, carries its settings over and leaves the rest alone",
     moved.changed.length === 1 &&
-      moved.config.enabled.join(",") === "arc-fit,jog" &&
+      moved.config.enabled.join(",") === "feed-scale,jog" &&
       moved.config.settings["jog"]?.keyboardFeed === 1200 &&
       moved.config.settings["jog"]?.keyboardEnabled === true &&
       moved.config.settings["old-mod"] === undefined &&
-      moved.config.settings["arc-fit"]?.minBytes === 1,
+      moved.config.settings["feed-scale"]?.feedFactor === 2,
     JSON.stringify(moved)
   );
   const enabledSet = initial.available.filter((m) => !m.core).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
-  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 9 && enabledInfo.mainMods.length === 11, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 8 && enabledInfo.mainMods.length === 11, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
   check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
 
   let written: { filePath: string; data: string } | null = null;
@@ -149,14 +144,11 @@ void (async () => {
 
   // Second tool change mid-program with spindle and coolant running: guard must insert M5, M9 and a retract.
   const twoTools = gcode.replace("G1 X20 Y15\n", "G1 X20 Y15\nT2 M6\nS9000 M3\nG1 X0 Y0\n");
-  // Padding before M30 pushes the program over arc-fit's minBytes so ArcWelder actually runs when available.
+  // Padding before M30 keeps the second program well above any size-gated post-processor threshold.
   const big = twoTools.replace("M30\n", `${"(pad)\n".repeat(400)}M30\n`);
   await invoke("store:write-file", `${downloads}two.nc`, big);
   const out2 = written!.data;
   check("tool-change-guard guards the second change", /\(usermod: tool change T2\)\nM5\nM9\nG53 G90 G0 Z-1\nT2 M6/.test(out2), out2.split("\n").slice(9, 16).join(" | "));
-  if (process.env.NEST_ARCWELDER) {
-    check("arc-fit ran through ArcWelder and kept the program", /G1 X20(\.0+)? Y15(\.0+)?/.test(out2) && out2.includes("(File: two.nc)") && out2.trim().endsWith("M30"), out2.split("\n").slice(-3).join(" | "));
-  } else console.log("SKIP arc-fit (ArcWelder not found)");
 
   // peck-drill: a 15 mm straight plunge followed by a retract becomes 3 mm pecks; the profile plunge in `gcode` stays.
   const drill = ["(header)", "G21 G90", "T1 M6", "S12000 M3", "G0 X5 Y5 Z5", "G1 Z-10 F200", "G0 Z5", "G1 X20 Y15 F800", "M30", ""].join("\n");
@@ -210,10 +202,10 @@ void (async () => {
   check("send stage passes through (bundled pps are export-only)", sent!.gcode === gcode && sent!.gcodeRunTime === 5);
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
-  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-scale", "arc-fit", "tool-change", "program-header", "safe-shutdown", "peck-drill", "gcode-format", "tool-split", "export"]), info.postprocessors.map((p) => p.name).join(","));
+  check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-scale", "tool-change", "program-header", "safe-shutdown", "peck-drill", "gcode-format", "tool-split", "export"]), info.postprocessors.map((p) => p.name).join(","));
   check("export wrote latest.json", fs.existsSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json")) && JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")).tools.includes(2));
   check("gcode-format is a no-op until one of its features is switched on", !out.includes("N10 ") && out.includes("(File: part.nc)"));
-  check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "mods-menu")?.core === true && info.available.find((m) => m.name === "arc-fit")?.enabled === true);
+  check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "mods-menu")?.core === true && info.available.find((m) => m.name === "peck-drill")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("view") === "ui" && reloadOf("jobs") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
   check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "final-geometry", "jobs", "lan-monitor", "machine-state", "pcb-import", "project-backup", "timelapse", "toolpath-modifiers"]), info.mainMods.map((m) => m.name).join(","));
@@ -308,7 +300,7 @@ void (async () => {
   const rp = data(await invoke<string>("usermod:run-postprocessors", "export", gcode, { fileName: "x.nc" }));
   check("run-postprocessors manual", rp.includes("(File: x.nc)"));
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
-  check("reload ok", rl.postprocessors.length === 9);
+  check("reload ok", rl.postprocessors.length === 8);
   fs.rmSync(path.join(loader.ROOT_DIR, "data", "reports"), { recursive: true, force: true });
 
   const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings|set-enabled)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));

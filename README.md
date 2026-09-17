@@ -12,7 +12,7 @@ workspace. It adds:
 - **Update-proof install**: an interactive installer rebuilds `app.asar` and can be re-run after every
   app update.
 
-Tested against Nest Studio 1.1.0 (Electron 39.8.10) on Windows 11 and macOS (Apple Silicon). Modifying
+Tested against Nest Studio 1.1.0 to 1.2.0 (Electron 39.8.10) on Windows 11 and macOS (Apple Silicon). Modifying
 the app may be against the vendor's terms of use; the `send` stage changes what reaches a real machine.
 Use with care. Licensed under the GPL-3.0 (see `LICENSE`).
 
@@ -108,7 +108,7 @@ packages/
   ui-kit/      @neststudio-usermods/ui-kit     window.usermodUI: toolbar buttons, popovers, modals, forms, settings forms; imperative DOM helpers
                                                plus bundled React 19 with matching components and hooks (usermodUI.react) for TSX mods
 mods/
-  feed-scale, arc-fit, tool-change, program-header, safe-shutdown, peck-drill, gcode-format,
+  feed-scale, tool-change, program-header, safe-shutdown, peck-drill, gcode-format,
   tool-split, export                                                                        (post-processors)
   mods-menu, appearance, view, bed-size, jog, work-zero, overrides, device-macros, tools,
   cycles, gcode-lab, cutter, feeds-speeds                                                   (UI)
@@ -159,7 +159,6 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `toolpath-modifiers` | main + ui | Runs chosen post-processors as the CAM generates each toolpath, so the Preview tab and the saved project carry the result |
 | `export` | post + main + ui | Everything around an export: save-dialog name template and folder, a stats report with depth / rapid / envelope checks, and an extra copy to a folder |
 | `feed-scale` | post | Scales and clamps `F` and `S` words in the exported program (no-op at factor 1) |
-| `arc-fit` | post | Runs the bundled ArcWelder on every export: G1 chains become G2/G3 arcs |
 | `program-header` | post | Comment block after the app header: file, date, lines, tools, feed / spindle range, XYZ bounds |
 | `safe-shutdown` | post | Inserts `M5` / `M9` before `M30` when the spindle or coolant were left on; appends `M30` if missing |
 | `peck-drill` | post | Deep straight plunges become peck cycles with chip-clearing retracts |

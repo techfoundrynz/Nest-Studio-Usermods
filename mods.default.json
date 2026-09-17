@@ -16,13 +16,6 @@
       "coolantOff": true,
       "programEnd": true
     },
-    "arc-fit": {
-      "resolutionMm": 0.01,
-      "pathTolerancePercent": 0.05,
-      "maxRadiusMm": 9999,
-      "allow3dArcs": false,
-      "minBytes": 2048
-    },
     "machine-state": {
       "logConsole": false,
       "broadcastMs": 500

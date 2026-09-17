@@ -19,9 +19,6 @@
       "path": "./mods/appearance/tsconfig.ui.json"
     },
     {
-      "path": "./mods/arc-fit/tsconfig.json"
-    },
-    {
       "path": "./mods/bed-size/tsconfig.json"
     },
     {

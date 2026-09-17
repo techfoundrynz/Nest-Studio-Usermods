@@ -161,7 +161,7 @@ Every call resolves to `Usermod.IpcResult<T>`: `{ ok: true, data }` or `{ ok: fa
 
 ### `window.api` (`NestStudio.Api`, the subset that is typed)
 
-`gcode.validate(text, toolSlots)`, `gcode.estimatedTime(text)`, `gcode.arcFit(text)`,
+`gcode.validate(text, toolSlots)`, `gcode.estimatedTime(text)`,
 `dialog.showSave(opts)` / `showOpen(opts)`, `store.read()`, `store.writeFile(path, text)` (dialog-picked
 paths only; goes through the post-processor hook), `shell.openExternal(url)` (allow-listed hosts only).
 

@@ -9,7 +9,7 @@ CNC software). These notes explain why the user-mod system is shaped the way it 
 nest-studio.exe (Electron 39, Chromium 142, Node 22)
  ├─ main process      out/main/index.js (readable Rollup output, ~3200 lines)
  │    ├─ spawns       resources\server\3Axis\Nest Studio Service.exe   (CAM, HTTP 127.0.0.1:9630)
- │    ├─ spawns       gcode_validator_cli.exe / ArcWelder.exe on demand
+ │    ├─ spawns       gcode_validator_cli.exe on demand
  │    ├─ gRPC client  to the machine (port 65002), UDP discovery (65003), serialport
  │    └─ IPC          ~55 channels registered via registerInvokeHandler / registerSendHandler
  ├─ preload           out/preload/index.js  -> window.api (contextIsolation + sandbox on)

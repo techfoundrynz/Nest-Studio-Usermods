@@ -423,7 +423,6 @@ declare namespace NestStudio {
     gcode: {
       validate(gcode: string, toolSlots?: string[]): Promise<Result<{ result: ValidationResult }>>;
       estimatedTime(gcode: string): Promise<Result<{ motionTime: number }>>;
-      arcFit(gcode: string): Promise<Result<{ gcode: string }>>;
     };
     dialog: {
       showSave(options: SaveDialogOptions): Promise<Result<{ filePath?: string; canceled?: boolean }>>;

@@ -18,7 +18,7 @@ $env:ENABLE_DOCS = '1'; & 'C:\Program Files\nest-studio\nest-studio.exe'
 
 The macOS build (verified against 1.1.0) has the same layout inside the bundle: the Electron binary is
 `/Applications/Nest Studio.app/Contents/MacOS/Nest Studio`, the CAM service and helper tools live under
-`Contents/Resources` (`server/3Axis/`, `ArcWelder` — same names without `.exe`), and the fuse states
+`Contents/Resources` (`server/3Axis/` — same names without `.exe`), and the fuse states
 match the Windows build. From zsh:
 
 ```zsh
@@ -63,7 +63,6 @@ ENABLE_DOCS=1 '/Applications/Nest Studio.app/Contents/MacOS/Nest Studio'
 | Executable | Arguments |
 | --- | --- |
 | `resources\server\gcodeCheck\gcode_validator_cli.exe` | `--rule_file=<rules.json> --gcode_file=<in.nc> --prompt_file=<in.nc> --result_file=<out.json>` (also accepts `--async`, `--max`, `--help`). Rules template lives in `out/main/index.js` (`gcodeRulesTemplate`). |
-| `resources\ArcWelder.exe` | `<input.nc> <output.nc> -r=0.01` (arc fitting; the app strips comment lines from the output). |
 
 ## Files worth knowing
 
