@@ -33,7 +33,10 @@ export const MODEL_IMPORT_BLOCK = `
 
 export function patchModelImport(source: string): string {
   if (source.includes(MODEL_IMPORT_MARKER)) return source;
-  const anchor = "  }, [loadModelFile]);\n  const onNewProject = reactExports.useCallback(() => {";
-  if (source.split(anchor).length !== 2) throw new Error("Nest Studio model-import anchor was not found exactly once; batch import cannot be patched safely.");
-  return source.replace(anchor, `  }, [loadModelFile]);\n${MODEL_IMPORT_BLOCK}\n  const onNewProject = reactExports.useCallback(() => {`);
+  const suffix = "  const onNewProject = reactExports.useCallback(() => {";
+  const anchors = ["  }, [loadModelFile, location.pathname]);\n", "  }, [loadModelFile]);\n"];
+  const matches = anchors.filter(a => source.split(a + suffix).length === 2);
+  if (matches.length !== 1) throw new Error("Nest Studio model-import anchor was not found exactly once; batch import cannot be patched safely.");
+  const anchor = matches[0]!;
+  return source.replace(anchor + suffix, `${anchor}${MODEL_IMPORT_BLOCK}\n${suffix}`);
 }

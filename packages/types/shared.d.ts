@@ -207,6 +207,11 @@ declare namespace Usermod {
     modal(title: string, options?: ModalOptions): ModalHandle;
     log(level: LogLevel, ...values: unknown[]): void;
     cam: CamClient;
+    /** Nest Studio 2.0's authoritative library, synchronized through its native controller. */
+    tools: {
+      list(): Promise<NestStudio.Tool[]>;
+      save(tool: NestStudio.Tool, replace: boolean, expectedVersion?: number): Promise<NestStudio.Tool>;
+    };
     formatDuration(seconds: number): string;
     formatBytes(bytes: number): string;
     readonly api: NestStudio.Api;

@@ -1,15 +1,15 @@
 {
-  "name": "@neststudio-mods/final-geometry",
-  "version": "0.1.0",
+  "name": "@neststudio-mods/stock-export",
+  "version": "0.2.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "Runs the material simulation to the end and compares the machined stock with the original model: rest material, overcuts, volumes, STL export",
+  "description": "Export simulated three-axis stock as STL and measure retained volume; uses an isolated height-field calculation",
   "usermod": {
-    "name": "final-geometry",
+    "name": "stock-export",
     "main": "dist/main.js",
     "ui": "dist/ui.js",
     "order": 49,
-    "description": "Runs the material simulation to the end and compares the machined stock with the original model: rest material, overcuts, volumes, STL export"
+    "description": "Export simulated three-axis stock as STL and measure retained volume; uses an isolated height-field calculation"
   },
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.ui.json",

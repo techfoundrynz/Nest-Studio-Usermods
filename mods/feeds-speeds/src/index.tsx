@@ -54,9 +54,7 @@
 
     function Calculator(): React.JSX.Element {
       const tools = useAsync(async () => {
-        const r = await window.api.store.read();
-        if (!r.ok) throw new Error(r.message ?? "store unreadable");
-        return r.data.toolLibary?.cutLibrarySettings ?? [];
+        return rt.tools.list();
       }, []);
       const { data: info, refresh } = useInfo();
       const settings = info?.config.settings["feeds-speeds"] ?? {};

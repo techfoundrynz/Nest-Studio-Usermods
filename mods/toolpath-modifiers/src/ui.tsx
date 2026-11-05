@@ -26,7 +26,7 @@
     last: LastRun | null;
   }
   /** Processors that only make sense on a whole program, not on one operation's G-code. */
-  const WHOLE_PROGRAM_ONLY = new Set(["program-header", "safe-shutdown", "export-copy", "export-report", "tool-split", "gcode-format"]);
+  const WHOLE_PROGRAM_ONLY = new Set(["program-header", "safe-shutdown", "export", "tool-split", "gcode-format"]);
 
   window.usermod.on<LastRun>("modifiers:applied", (run) => {
     rt.toast(`Toolpath modifiers applied to ${run.endpoint.replace("/api/", "")} (${rt.formatBytes(run.bytesIn)} → ${rt.formatBytes(run.bytesOut)}, ${run.ms} ms)`, { kind: "info", duration: 3500 });

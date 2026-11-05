@@ -5,7 +5,7 @@
  *
  * Camera: switch between the app's perspective camera and an isometric-style projection (a very narrow field
  * of view at a scaled distance, so the app's own orbit, zoom and pan keep working), and jump to Top / Front /
- * Right / Back / Left / Iso or reset. Toolpath colour: repaint the preview's paths by Z depth or per operation
+ * Right / Back / Left / Iso or reset. Toolpath colour: repaint the preview's paths by Z depth
  * and dim everything except the path under the mouse in the toolpath list.
  *
  * Both read the app's three.js scene through the installer's scene patch (globalThis.__usermodSceneManagers).
@@ -155,7 +155,7 @@
         const view = (label: string, dir: [number, number, number]) => ui.button(label, () => lookFrom(manager, dir));
         body.append(
           rt.el("h3", { text: "View" }),
-          ui.buttonRow([view("Top", [0, 0, 1]), view("Front", [0, -1, 0]), view("Right", [1, 0, 0]), view("Back", [0, 1, 0]), view("Left", [-1, 0, 0]), view("Iso", [1, -1, 1])]),
+          ui.buttonRow([view("Right", [1, 0, 0]), view("Back", [0, 1, 0]), view("Left", [-1, 0, 0])]),
           ui.buttonRow([
             ui.button(isIso(manager) ? "Perspective projection" : "Isometric projection", () => {
               setIso(manager, !isIso(manager));
@@ -176,7 +176,7 @@
       const ui = window.usermodUI;
       const { Sub, Row, Button, Select, Toggle, KV, useInfo } = ui.react;
 
-      type Mode = "depth" | "path" | "off";
+      type Mode = "depth" | "off";
       let mode: Mode = "depth";
       let highlightEnabled = true;
       const GROUP = "previewGcodeGroup";
@@ -190,7 +190,6 @@
         return [srgbToLinear(((n >> 16) & 255) / 255), srgbToLinear(((n >> 8) & 255) / 255), srgbToLinear((n & 255) / 255)];
       };
       const RAPID = hexToLinear(RAPID_HEX);
-      const PATH_PALETTE = ["#13aa45", "#4889ff", "#7749fa", "#eb52a0", "#f59e0b", "#06b6d4", "#84cc16", "#ef4444", "#a855f7", "#14b8a6"].map(hexToLinear);
       /** Depth ramp in sRGB: green → yellow → orange → red, then converted to linear. */
       const ramp = (t: number): RGB => {
         const stops: [number, RGB][] = [
@@ -297,14 +296,11 @@
       }
 
       let lastRange: [number, number] = [0, 0];
-      let pathColors = new Map<string, number>();
       function apply(hover: string | null = null): void {
         for (const mgr of managers()) {
           const lines = toolpathLines(mgr);
           if (!lines.length) continue;
           if (mode === "depth") lastRange = zRange(lines);
-          const ids = lines.map((l) => String(l.userData.gcodeId));
-          for (const id of ids) if (!pathColors.has(id)) pathColors.set(id, pathColors.size % PATH_PALETTE.length);
           const [zMin, zMax] = lastRange;
           for (const line of lines) {
             const geometry = line.geometry;
@@ -312,13 +308,11 @@
             const id = String(line.userData.gcodeId);
             lineTool.set(line, toolOf(id));
             const pos = geometry.getAttribute("position");
-            const dim = hover !== null && hover !== id;
-            const pathColor = PATH_PALETTE[pathColors.get(id) ?? 0]!;
+            const dim = hover !== null && !hover.split("\u001f").includes(id);
             write(geometry, (i, original) => {
               let c: RGB = original;
               if (!isRapid(original)) {
                 if (mode === "depth" && pos && zMax > zMin) c = ramp((zMax - (pos.array[i * 3 + 2] ?? zMax)) / (zMax - zMin));
-                else if (mode === "path") c = pathColor;
               }
               return dim ? [c[0] * 0.12 + 0.02, c[1] * 0.12 + 0.02, c[2] * 0.12 + 0.02] : c;
             });
@@ -342,7 +336,8 @@
       document.addEventListener("mouseover", (e) => {
         if (!highlightEnabled) return;
         const row = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-gcode-id]") : null;
-        const id = row?.dataset.gcodeId ?? null;
+        const ids: unknown = row?.dataset.usermodGcodeIds ? JSON.parse(row.dataset.usermodGcodeIds) : null;
+        const id = Array.isArray(ids) ? ids.filter((v): v is string => typeof v === "string").join("\u001f") || null : row?.dataset.gcodeId ?? null;
         if (id === hovered) return;
         hovered = id;
         apply(hovered);
@@ -357,7 +352,7 @@
       void window.usermod.info().then((r) => {
         if (!r.ok) return;
         const s = r.data.config.settings["toolpath-color"] ?? {};
-        mode = s.mode === "path" || s.mode === "off" ? s.mode : "depth";
+        mode = s.mode === "off" || s.mode === "path" ? "off" : "depth";
         highlightEnabled = s.highlight !== false;
         apply();
       });
@@ -385,7 +380,7 @@
         return (
           <>
             <h3>Toolpath colour</h3>
-            <Select label="Colour by" options={[{ value: "depth", label: "Depth (green → red)" }, { value: "path", label: "Operation (one colour per path)" }, { value: "off", label: "App default (by tool)" }]} value={mode} onChange={(v) => void setMode(v === "path" || v === "off" ? v : "depth")} />
+            <Select label="Colour by" options={[{ value: "depth", label: "Depth (green → red)" }, { value: "off", label: "Native operation colours" }]} value={mode} onChange={(v) => void setMode(v === "off" ? "off" : "depth")} />
             <Toggle label="Highlight the path under the mouse in the list" checked={highlightEnabled} onChange={(on) => void setHighlight(on)} />
             <KV
               pairs={[

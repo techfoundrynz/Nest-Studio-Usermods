@@ -306,3 +306,20 @@ registers them, registers the `usermod:*` IPC surface, loads post-processors and
 manifests, and lists UI mods for the preload to inject. `preload.ts` compiles to a block that the
 installer appends to the app preload; `ui-runtime.ts` is the first script injected into the page. Logs
 go to `usermod.log` in the repo root (rotates at 2 MB).
+
+## Nest Studio 2.0 tool library
+
+Use `await window.usermodRuntime.tools.list()` to read the authoritative library. Do not read or write
+`store.toolLibary.cutLibrarySettings` for live tools. To create an unloaded definition, call
+`tools.save(tool, false)`. To replace an existing definition, call `tools.save(tool, true, tool.version)`
+using a version from a fresh list. Stale replacements fail; native updates refresh dependent projects.
+New IDs are assigned by the CAM service. Definition import does not install a tool in a hardware pocket.
+
+Native exports stream to a temporary file; the loader applies export processors before commit, including
+individual NC members in G-code ZIPs. Processors still receive whole program strings. A 256 MiB file/expanded
+ZIP processing limit applies; project ZIPs bypass the G-code chain. Sidecar reports and tool splits for archive
+members use distinct file names prefixed with the archive name beside the selected archive.
+
+Cutter extensions must forward `resetStockRemoval`'s backend/shared-stock arguments and `seekSpatialSample`'s
+playback options. `runtime.usermodSample(index)` resolves G-code ID, numbered tool and metadata without
+materializing the packed timeline. Native `applyToolPose` also advances during GPU material playback.

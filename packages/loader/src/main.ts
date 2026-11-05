@@ -10,20 +10,31 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 // Plain require so the very same module object the app uses is patched and handed to mods.
 import electron = require("electron");
+import { transformExportFile } from "./export-file";
 
-const LOADER_VERSION = "0.3.0";
+const LOADER_VERSION = "0.4.0";
 const { app, ipcMain, shell, BrowserWindow } = electron;
 
 /** packages/loader/dist -> repo root. */
 const ROOT_DIR = path.resolve(__dirname, "..", "..", "..");
 const MODS_DIR = path.join(ROOT_DIR, "mods");
-const DATA_DIR = path.join(ROOT_DIR, "data");
-const LOG_FILE = path.join(ROOT_DIR, "usermod.log");
+const DATA_DIR = process.env.USERMOD_DATA_DIR ? path.resolve(process.env.USERMOD_DATA_DIR) : path.join(ROOT_DIR, "data");
+const LOG_FILE = process.env.USERMOD_LOG_FILE ? path.resolve(process.env.USERMOD_LOG_FILE) : path.join(ROOT_DIR, "usermod.log");
 /** Per-machine config. USERMOD_CONFIG points it elsewhere so the test harness never touches the real one. */
 const CONFIG_FILE = process.env.USERMOD_CONFIG ? path.resolve(process.env.USERMOD_CONFIG) : path.join(ROOT_DIR, "mods.json");
 /** Tracked template; mods.json itself is per machine and git-ignored. */
 const CONFIG_DEFAULT_FILE = path.join(ROOT_DIR, "mods.default.json");
 const GCODE_EXT = /\.(nc|gcode|tap|ngc|cnc)$/i;
+
+/** The installer calls this before the native streamed writer commits its temporary file. */
+async function processExportFile(temporaryPath: string, targetPath: string): Promise<void> {
+  if (!state.postprocessors.some(p => p.stages.includes("export"))) return;
+  await transformExportFile(temporaryPath, targetPath, async (text, context) => {
+    const processed = await runPostprocessors("export", text, context);
+    emit("gcode-exported", { ...context, lines: countLines(processed), bytes: Buffer.byteLength(processed) });
+    return processed;
+  });
+}
 
 interface Manifest {
   name: string;
@@ -148,7 +159,9 @@ interface Migration {
 }
 /** Copies just the listed keys, renaming as it goes; the usual building block for a migration's settings(). */
 const pick = (o: Record<string, unknown>, map: Record<string, string>): Record<string, unknown> => Object.fromEntries(Object.entries(map).filter(([from]) => o[from] !== undefined).map(([from, to]) => [to, o[from]]));
-const MIGRATIONS: Record<string, Migration> = {};
+const MIGRATIONS: Record<string, Migration> = {
+  "final-geometry": { into: "stock-export", settings: old => pick(old, { exportStride: "exportStride" }) }
+};
 
 /** The rename itself, with no file access, so it can be exercised on its own. */
 function applyMigrations(config: Usermod.Config, migrations: Record<string, Migration>): { config: Usermod.Config; changed: string[] } {
@@ -161,6 +174,12 @@ function applyMigrations(config: Usermod.Config, migrations: Record<string, Migr
     if (!wasEnabled && !oldSettings) continue;
     settings[migration.into] = { ...(settings[migration.into] ?? {}), ...migration.settings(oldSettings ?? {}, wasEnabled) };
     delete settings[oldName];
+    const menu = settings["mods-menu"];
+    if (menu) {
+      for (const key of ["toolbarOrder", "toolbarPinned"]) {
+        if (Array.isArray(menu[key])) settings["mods-menu"] = { ...settings["mods-menu"], [key]: menu[key].map(name => name === oldName ? migration.into : name) };
+      }
+    }
     if (wasEnabled) {
       enabled.delete(oldName);
       enabled.add(migration.into);
@@ -721,4 +740,4 @@ try {
   recordError("startup", error);
 }
 
-export { runPostprocessors, getInfo, state, ROOT_DIR, MODS_DIR, CONFIG_FILE, applyMigrations };
+export { runPostprocessors, processExportFile, getInfo, state, ROOT_DIR, MODS_DIR, DATA_DIR, CONFIG_FILE, applyMigrations };

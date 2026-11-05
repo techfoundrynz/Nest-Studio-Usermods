@@ -2,11 +2,9 @@
  * Tool library: export the tools you pick to a JSON file and import them back, from this mod's own format, a
  * bare array of tools, another machine's store.json, or a Fusion 360 library (its `.json` libraries and its
  * `.tools` exports, which are zipped). The import lists every incoming tool with what will
- * happen to it and how clashes resolve: same id replaces, keeps both with a new id, or is skipped; a taken
- * slot moves to the next free one or is shared.
+ * happen to it and how id clashes resolve: replace, keep both, or skip.
  *
- * The app keeps its tools in the user store (toolLibary.cutLibrarySettings); this writes them back through
- * the app's own bridge and reloads the UI so the library picks them up.
+ * Nest Studio 2.0 keeps tools in the CAM service. The native controller updates versions, slots and projects.
  */
 (function toolLibrary(): void {
   const rt = window.usermodRuntime;
@@ -260,10 +258,8 @@
     /** Magazine slot for display: a dash when the tool is in the library but not loaded on the machine. */
     const slotLabel = (slot: number | null | undefined): string => (typeof slot === "number" && slot > 0 ? `T${slot}` : "not loaded");
 
-    async function readLibrary(): Promise<{ store: NestStudio.Store; tools: Tool[] }> {
-      const r = await window.api.store.read();
-      if (!r.ok) throw new Error(r.message ?? "could not read the store");
-      return { store: r.data, tools: r.data.toolLibary?.cutLibrarySettings ?? [] };
+    async function readLibrary(): Promise<{ tools: Tool[] }> {
+      return { tools: await rt.tools.list() };
     }
 
     /* ---------------------------------------------------------------- export */
@@ -336,13 +332,6 @@
 
     /* ---------------------------------------------------------------- import */
     type IdPolicy = "replace" | "keep-both" | "skip";
-    /*
-     * A magazine slot is a physical pocket on the machine, not a tool number. The app only offers tools whose
-     * slot is null when you load a magazine slot, so an imported tool that arrives holding a number looks like
-     * it is already loaded and never appears in that picker. "unloaded" is therefore the honest default for a
-     * Fusion library, whose numbers are just tool numbers from someone else's post.
-     */
-    type SlotPolicy = "unloaded" | "next-free" | "keep";
     interface Plan {
       tool: Tool;
       status: "new" | "replace" | "duplicate" | "skip";
@@ -350,19 +339,11 @@
       slot: number | null;
       note: string;
     }
-    function plan(incoming: Tool[], existing: Tool[], idPolicy: IdPolicy, slotPolicy: SlotPolicy): Plan[] {
+    function plan(incoming: Tool[], existing: Tool[], idPolicy: IdPolicy): Plan[] {
       const byId = new Map(existing.map((t) => [t.id, t]));
-      const usedSlots = new Set(existing.map((t) => Number(t.slotNum)).filter((n) => Number.isFinite(n) && n > 0));
-      let nextFree = 1;
-      const takeFree = (): number => {
-        while (usedSlots.has(nextFree)) nextFree += 1;
-        usedSlots.add(nextFree);
-        return nextFree;
-      };
       const out: Plan[] = [];
       for (const raw of incoming) {
-        const wanted = Number.isFinite(Number(raw.slotNum)) && Number(raw.slotNum) > 0 ? Number(raw.slotNum) : null;
-        const tool: Tool = { ...raw, id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(), slotNum: wanted };
+        const tool: Tool = { ...raw, id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(), slotNum: null };
         const clash = byId.get(tool.id);
         let status: Plan["status"] = "new";
         let note = "";
@@ -374,35 +355,21 @@
           if (idPolicy === "replace") {
             status = "replace";
             note = `replaces "${clash.name}"`;
-            if (clash.slotNum != null) usedSlots.delete(Number(clash.slotNum));
           } else {
             tool.id = crypto.randomUUID();
             status = "duplicate";
             note = `kept alongside "${clash.name}" with a new id`;
           }
         }
-        /* A tool that names no slot stays unloaded rather than being given one it never had. */
-        let slot: number | null = wanted;
-        if (slotPolicy === "unloaded" || slot === null) {
-          slot = null;
-        } else if (usedSlots.has(slot) && slotPolicy === "next-free") {
-          const moved = takeFree();
-          if (moved !== slot) note += `${note ? "; " : ""}slot T${slot} taken → T${moved}`;
-          slot = moved;
-        } else if (usedSlots.has(slot)) {
-          note += `${note ? "; " : ""}shares slot T${slot}`;
-        } else {
-          usedSlots.add(slot);
-        }
+        const slot = status === "replace" ? clash?.slotNum ?? null : null;
         out.push({ tool: { ...tool, slotNum: slot }, status, slot, note });
       }
       return out;
     }
     function ImportView({ incoming, existing, fileName, source, unsupported, done }: { incoming: Tool[]; existing: Tool[]; fileName: string; source: string; unsupported: string[]; done(): void }): React.JSX.Element {
       const [idPolicy, setIdPolicy] = React.useState<IdPolicy>("replace");
-      const [slotPolicy, setSlotPolicy] = React.useState<SlotPolicy>(source === "Fusion 360" ? "unloaded" : "next-free");
       const [picked, setPicked] = React.useState(() => new Set(incoming.map((_, i) => i)));
-      const plans = plan(incoming, existing, idPolicy, slotPolicy);
+      const plans = plan(incoming, existing, idPolicy);
       const chosen = plans.filter((p, i) => picked.has(i) && p.status !== "skip");
       const set = (i: number, on: boolean): void =>
         setPicked((prev) => {
@@ -413,14 +380,18 @@
         });
       const apply = async (): Promise<void> => {
         if (!chosen.length) throw new Error("Nothing selected");
-        const { store, tools } = await readLibrary(); // fresh copy right before writing
-        const replaced = new Set(chosen.filter((p) => p.status === "replace").map((p) => p.tool.id));
-        const nextTools = [...tools.filter((t) => !replaced.has(t.id)), ...chosen.map((p) => p.tool)];
-        const w = await window.api.store.write({ ...store, toolLibary: { ...(store.toolLibary ?? {}), cutLibrarySettings: nextTools } });
-        if (!w.ok) throw new Error(w.message ?? w.code ?? "store write failed");
-        rt.toast(`Imported ${chosen.length} tool(s); reloading the UI so the library shows them`, { kind: "success", duration: 4000 });
+        let imported = 0;
+        try {
+          for (const item of chosen) {
+            const expectedVersion = existing.find(t => t.id === item.tool.id)?.version;
+            await rt.tools.save({ ...item.tool, slotNum: null }, item.status === "replace", typeof expectedVersion === "number" ? expectedVersion : undefined);
+            imported += 1;
+          }
+        } catch (error) {
+          throw new Error(`Imported ${imported} tool(s) before stopping: ${error instanceof Error ? error.message : String(error)}. Close and reopen this import before retrying.`);
+        }
+        rt.toast(`Imported ${imported} tool(s) into the tool library`, { kind: "success", duration: 4000 });
         done();
-        setTimeout(() => window.location.reload(), 900);
       };
       return (
         <>
@@ -430,20 +401,11 @@
           ) : null}
           <Row>
             <Select label="Same id already in the library" options={[{ value: "replace", label: "Replace the existing tool" }, { value: "keep-both", label: "Keep both (new id)" }, { value: "skip", label: "Skip" }]} value={idPolicy} onChange={(v) => setIdPolicy(v === "keep-both" ? "keep-both" : v === "skip" ? "skip" : "replace")} />
-            <Select
-              label="Magazine slot"
-              options={[
-                { value: "unloaded", label: "Leave unloaded (load them on the machine)" },
-                { value: "next-free", label: "Claim a slot, moving off taken ones" },
-                { value: "keep", label: "Claim the slot it names (shared)" }
-              ]}
-              value={slotPolicy}
-              onChange={(v) => setSlotPolicy(v === "keep" ? "keep" : v === "next-free" ? "next-free" : "unloaded")}
-            />
+
           </Row>
           <Sub>
-            A magazine slot is a physical pocket on the machine, and it only offers unloaded tools when you load
-            one. Tools imported as unloaded show up in the library and can then be loaded on the device.
+            New tools are imported into the library unloaded. Replacing a tool preserves its current magazine pocket.
+            Use the native device controls to install tools into physical pockets.
           </Sub>
           <table className="usermod-tl">
             <thead>
@@ -556,7 +518,7 @@
             Export writes a JSON file you can share or back up. Import reads that file, another machine&apos;s
             store.json, or a Fusion 360 library (a <code>.json</code> library or a zipped <code>.tools</code>
             export), working out which it is from the file itself. It then lets you pick tools and settle id and
-            slot clashes.
+            id clashes.
           </Sub>
           <ModalFooter>
             <Button label={showExport ? "Hide export list" : "Export tools…"} primary onClick={() => setShowExport((v) => !v)} />

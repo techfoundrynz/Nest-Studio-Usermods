@@ -1,6 +1,6 @@
 # Nest Studio architecture notes
 
-Findings from an investigation of Nest Studio 1.1.0 for Windows (Nestworks / Elephant Robotics desktop
+Findings from Nest Studio 1.1.0, updated for the 2.0.0 loader migration for Windows (Nestworks / Elephant Robotics desktop
 CNC software). These notes explain why the user-mod system is shaped the way it is.
 
 ## Processes
@@ -46,8 +46,12 @@ cover the asar.
 | `store:write-file(filePath, text)` | every text file the renderer saves | post-processors on `.nc .gcode .tap .ngc .cnc` (stage `export`) |
 | `device:send-gcode(options)` / `device:sync-gcode-to-small-screen(options)` | `{ fileName, gcode, gcodeRunTime, limitResult }` | post-processors stage `send` |
 
-The renderer writes exports through `window.api.store.writeFile(dialogPath, gcode)`; the main-process
-path sandbox only allows user data, temp, downloads and dialog-picked paths. Internal scratch files
+In 2.0, native exports use begin/append/finish binary writes. The installer patches `finishBinaryFileWrite`
+after closing its temporary file and before the atomic rename, calling the loader's `processExportFile`.
+NC files and every member of G-code-only ZIPs run through the export chain. ZIP directory inspection skips
+project saves without expanding them. A processing failure aborts the commit and preserves the old destination.
+The text-file hook remains for legacy/internal callers. The native main-process path sandbox still authorizes
+all destinations before a write session begins. Internal scratch files
 under user data are skipped by the loader unless a post-processor sets `includeInternal`.
 
 ## Repository layout and build
@@ -76,3 +80,22 @@ inside 36 px buttons.
 `electron-updater` with a generic provider downloads a full NSIS installer, which removes the whole
 install directory before installing. Anything under `Program Files` is lost on update; this repo lives
 elsewhere and `pnpm run install:app` re-applies the patch to the new `app.asar` in a few seconds.
+
+## Nest Studio 2.0 integration
+
+Toolpath modifiers intercept successful `cam:read-toolpaths` results recursively at explicit `gcode` fields,
+and STEP NC text returned by `cam:read-process-tree`. Other process-tree/geometry JSON remains untouched.
+Inline custom-operation HTTP responses remain supported; fallback returns a clone of the original response,
+never a duplicate generation request. Preview markers prevent the same processor running again at export.
+
+`__usermodTools` is installed alongside the native `ToolLibraryController`; UI mods access it through
+`usermodRuntime.tools`. Reads refresh authoritative service state. Writes use native create/update methods,
+optimistic versions, native project invalidation and physical slot management. The JSON user store is no
+longer authoritative for tool definitions.
+
+Material simulation is enabled by the vendor. `stock-export` performs an isolated CPU height-field calculation
+with copied timeline data, separate numbered tools, stock-origin offsets, cancellation and cleanup. It does
+not move or replace the active GPU preview. Output is approximate and excludes rotary machining/undercuts.
+
+All mandatory bridge sites and requested optional sites must verify before packing. Installer/preload source
+fingerprints invalidate stale staging directories and install stamps after patch changes.

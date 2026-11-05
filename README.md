@@ -12,7 +12,7 @@ workspace. It adds:
 - **Update-proof install**: an interactive installer rebuilds `app.asar` and can be re-run after every
   app update.
 
-Tested against Nest Studio 1.1.0 to 1.2.0 (Electron 39.8.10) on Windows 11 and macOS (Apple Silicon). Modifying
+Targets Nest Studio 2.0.0 (Electron 44.4.5) on Windows 11 and macOS (Apple Silicon). Modifying
 the app may be against the vendor's terms of use; the `send` stage changes what reaches a real machine.
 Use with care. Licensed under the GPL-3.0 (see `LICENSE`).
 
@@ -62,8 +62,8 @@ breaks the UI: `pnpm run mods` (picker), or `pnpm run install:app -- --disable-m
 
 **Versions.** `versions.json` lists the Nest Studio versions the patches have been verified against. For
 any other version the installer warns and asks (non-interactive runs need `--allow-untested`). Patches
-are anchor-based and a parse check guards the main script, so new versions usually just work; add them
-to the file once confirmed.
+are anchor-based; required patch sites and syntax are verified before installation. Revalidate changed APIs
+and run the regression suite before adding a new version.
 
 Non-interactive equivalents:
 
@@ -75,19 +75,33 @@ Non-interactive equivalents:
 | `pnpm run install:app -- --install --cam-docs` | build option: start the CAM service with `ENABLE_DOCS=1` so Swagger is at `127.0.0.1:9630/docs` |
 | `pnpm run install:app -- --install --multi-side` | build option: more than two machining sides. Keeps the Flip Setup "+" after the second side and tiles extra flip platforms; generation, preview face switching, per-face export and the machining queue already handle any number |
 | `pnpm run install:app -- --install --bed-size` | build option: let the `bed-size` mod tell the app how much travel the machine really has (it hard-codes X 238, Y 200, Z 123 mm and a 225 mm work platform) |
-| `pnpm run install:app -- --install --stock-sim` | build option: turn on the app's material simulation, which it ships switched off (`ENABLE_STOCK_REMOVAL_SIMULATION = false`). Adds the Preview tab's toolpath/material toggle and is required by `final-geometry` |
+
+**Upgrading to 2.0.** Close Nest Studio and rerun the installer. Version 0.4 adds processing before
+streamed G-code files are committed, including each program inside a G-code ZIP; project ZIPs are untouched.
+The native save-path authorization remains in place. Export processing has a 256 MiB file/expanded-archive
+limit and fails the export rather than silently omitting processors. New patch code automatically invalidates
+the build stamp, so an old archive is rebuilt even when its source version and build options match.
+
+The obsolete `--stock-sim` option has been removed: material simulation and machining inspection are native.
+`final-geometry` is replaced by `stock-export`, retaining per-face three-axis height-field STL export and
+approximate retained volume. Enabled state, toolbar order and relevant settings migrate automatically.
+Native inspection handles overcut/rest-material reports; the duplicate mod analysis and overlays are removed.
+View presets Top/Front/Iso and operation colouring now use the native controls. The view mod retains depth
+colouring, hover highlighting, narrow-FOV projection and additional camera directions.
+Tool-library reads and selective/Fusion imports use the native CAM controller; new tools stay unloaded,
+and replacements preserve their magazine pockets. Toolpath modifiers handle file-backed STL/relief/STEP
+results and inline custom operations without reissuing failed CAM requests.
 
 Build options are baked into the patched archive. The interactive install asks for them; `--no-devtools` /
 `--no-cam-docs` / `--no-multi-side` turn them off again. The MODS panel shows which ones the installed build
 carries.
 
-**More than two sides.** With `--multi-side` the Flip Setup panel keeps its "+" button, so a project can have
-any number of machining sides (each a 180° flip about X or Y of the previous stock orientation). Everything
-downstream already handles N sides: per-side toolpath generation, the Preview face switcher, one exported
-program per side, and the machine's job queue that asks you to flip and continue after each face. Two things
-stay two-sided in the app itself: the CAM service pairs support-tab data between "the" top face and each
-bottom face, and the material simulation always starts a face from fresh stock (the final-geometry mod
-compares one face at a time for the same reason).
+**More than two sides.** With `--multi-side`, additional named three-axis flip setups stay available,
+and their platforms occupy separate slots. These are independent flip setups from the primary model,
+using the app's native flip direction; this does not introduce arbitrary indexed machining angles.
+Support-tab pairing and reserve-support visualization still follow the native top/first-bottom relationship.
+Material simulation and stock export evaluate one face at a time.
+
 | `pnpm run build:asar` | build `build\app.asar` without touching the install (no admin) |
 | `pnpm run mods` | CLI fallback for enabling/disabling mods (writes `mods.json`) |
 | `pnpm run uninstall:app` | restore `app.asar.orig` |
@@ -113,7 +127,7 @@ mods/
   mods-menu, appearance, view, bed-size, jog, work-zero, overrides, device-macros, tools,
   cycles, gcode-lab, cutter, feeds-speeds                                                   (UI)
   machine-state, timelapse, project-backup                                                  (main)
-  app-tools, jobs, lan-monitor, final-geometry, toolpath-modifiers, export                   (main/post + UI)
+  app-tools, jobs, lan-monitor, stock-export, toolpath-modifiers, export                   (main/post + UI)
 mods.default.json   tracked template: enabled list (empty) + default settings
 mods.json           per-machine copy (git-ignored), created from the template on first run, edited by the Enable/disable mods window and settings forms
 docs/          launch-options.md, architecture.md, mod-api.md
@@ -138,7 +152,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | --- | --- | --- |
 | `mods-menu` | ui | App-bar button, status panel and the Enable/disable mods window (toolbar order, what is loaded) |
 | `appearance` | main + ui | Theme (light / dark, follow the OS) and UI scale (zoom, `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, compact density) |
-| `view` | ui | 3D view: isometric projection with camera presets, and toolpath colouring by depth or operation with hover highlight |
+| `view` | ui | 3D view enhancements: narrow-FOV projection, Right/Back/Left directions, depth colouring and hover highlight |
 | `bed-size` | ui | The machine travel and 3D platform size the app assumes, instead of its built-in 238 x 200 x 123 mm (needs `--bed-size`) |
 | `app-tools` | main + ui | Log and user-data folders, CAM service status and API docs, developer shortcuts (`Ctrl+Shift+M/R/L`, `F12`) |
 | `jobs` | main + ui | Job lifecycle: desktop toast and webhook when a run finishes, alarms or pauses; run history with CSV export; the on-screen status pill |
@@ -150,12 +164,12 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `lan-monitor` | main + ui | Read-only status page on the local network with progress, ETA and the latest camera frame |
 | `machine-state` | main | Shared machine status, positions, WCS, feed / spindle, progress and ETA (`machine:state`) for the other mods |
 | `timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
-| `tools` | ui | Tool library export / import as JSON or a Fusion 360 library (`.json` and zipped `.tools`), resolving id and slot clashes |
+| `tools` | ui | Tool library export / import as JSON or a Fusion 360 library (`.json` and zipped `.tools`), resolving id clashes through the native tool controller |
 | `feeds-speeds` | ui | Chip-load feeds and speeds calculator per material, against the tool library, with favourites |
 | `cycles` | ui | Cycle generators: thread milling, helical hole milling and spoilboard surfacing, with preview, validation and export |
 | `gcode-lab` | ui | Drop any G-code file: stats, post-processor preview, validate, time estimate, export via the chain |
 | `cutter` | ui | Rebuilds the preview's cutter model per toolpath from the tool library (flat, ball, taper / V, drill) |
-| `final-geometry` | main + ui | Runs the material simulation to the end and compares the machined stock with the model: rest material, overcuts, volumes, STL export (needs `--stock-sim`) |
+| `stock-export` | main + ui | Isolated three-axis height-field calculation for machined-stock STL export and approximate retained volume; native Preview owns inspection |
 | `toolpath-modifiers` | main + ui | Runs chosen post-processors as the CAM generates each toolpath, so the Preview tab and the saved project carry the result |
 | `export` | post + main + ui | Everything around an export: save-dialog name template and folder, a stats report with depth / rapid / envelope checks, and an extra copy to a folder |
 | `feed-scale` | post | Scales and clamps `F` and `S` words in the exported program (no-op at factor 1) |

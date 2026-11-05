@@ -11,6 +11,12 @@ interface Window {
   api: NestStudio.Api;
 }
 
+declare var __usermodTools: Usermod.Runtime["tools"] | undefined;
+interface UsermodStockGrid {
+  nx: number; ny: number; minX: number; minY: number; minZ: number; dx: number; dy: number; heights: Float32Array;
+}
+declare var __usermodStockExport: ((runtime: UsermodSimRuntimeLike, signal: AbortSignal) => Promise<UsermodStockGrid>) | undefined;
+
 /** Installed renderer bridge; resolves only after every successful model is committed. */
 declare var __usermodModelImport: {
   importFiles(files: File[], progress?: (imported: number, total: number, name: string) => void): Promise<{
@@ -125,6 +131,7 @@ declare var __usermodBedPlatform: number | undefined;
 /* The preview's toolpath simulation runtime (EditorToolpathSimulationRuntime), exposed by the installer's
  * second scene patch. It owns the visible cutter and receives the per-path tool metadata. */
 interface UsermodToolMeta {
+  toolsByNumber?: Record<number, UsermodToolMeta>;
   diameter?: number;
   toolType?: string;
   shankDiameter?: number;
@@ -197,10 +204,12 @@ interface UsermodSimRuntimeLike {
   stockRemoval: UsermodStockRemovalLike | null;
   /** One G-code id per spatial sample, aligned with the sample index passed to the seek methods. */
   getSpatialGcodeIds(): string[];
-  seekSpatialSample(sampleIndex: number): unknown;
+  seekSpatialSample(sampleIndex: number, options?: { stockPlayback?: boolean }): unknown;
+  usermodSample?(sampleIndex: number): { gcodeId: string | null; toolNumber: number | null; meta?: UsermodToolMeta };
+  applyToolPose?(result: { sampleIndex?: number; [key: string]: unknown }): void;
   /** { sync: true, refineNormals: true } is the app's own "settle" path; huge indices clamp to the last sample. */
   seekStockRemoval(sampleIndex: number, options?: { sync?: boolean; refineNormals?: boolean }): void;
-  resetStockRemoval(toolsByGcodeId: Map<string, UsermodToolMeta>): void;
+  resetStockRemoval(toolsByGcodeId: Map<string, UsermodToolMeta>, backend?: unknown, sharedStock?: unknown): void;
 }
 declare var __usermodSimRuntimes: Set<UsermodSimRuntimeLike> | undefined;
 

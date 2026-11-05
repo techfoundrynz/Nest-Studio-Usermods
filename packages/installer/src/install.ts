@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import prompts from "prompts";
 import { MODEL_IMPORT_MARKER, patchModelImport } from "./model-import";
+import { EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, patchStreamExport, patchTools, patchStockExport, patchMultiSide, MULTISIDE_SITES, patchCutter, CUTTER_MARKER, PREVIEW_MARKER, patchPreview } from "./compatibility";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const IS_MAC = process.platform === "darwin";
@@ -72,12 +73,10 @@ const LIT_LOWER = `{\n  x: { min: -238, max: 0 },\n  y: { min: -200, max: 0 },\n
 const PATCHED_LOWER = `{ ${BED_MARKER}\n  get x() { return globalThis.__usermodBed?.X ?? { min: -238, max: 0 }; },\n  get y() { return globalThis.__usermodBed?.Y ?? { min: -200, max: 0 }; },\n  get z() { return globalThis.__usermodBed?.Z ?? { min: -123, max: 0 }; }\n}`;
 const LIT_PLATFORM = "const EDITOR_WORK_PLATFORM_SIZE = 225;";
 const PATCHED_PLATFORM = `const EDITOR_WORK_PLATFORM_SIZE = Number(globalThis.__usermodBedPlatform) > 0 ? Number(globalThis.__usermodBedPlatform) : 225; ${BED_MARKER}`;
-/* Stock-removal simulation: the app ships the material-removal view switched off behind a build constant,
- * which also hides the Preview tab's toolpath/material toggle. Flipping it on is what lets the final-geometry
- * mod run the simulation to the end. */
-const STOCKSIM_MARKER = "/* NEST-USERMOD-STOCKSIM */";
-const LIT_STOCKSIM = "const ENABLE_STOCK_REMOVAL_SIMULATION = false;";
-const PATCHED_STOCKSIM = `const ENABLE_STOCK_REMOVAL_SIMULATION = true; ${STOCKSIM_MARKER}`;
+const LIT_XY = `{\n  X: { min: -238, max: 0 },\n  Y: { min: -200, max: 0 }}`;
+const PATCHED_XY = `{ ${BED_MARKER}\n  get X() { return globalThis.__usermodBed?.X ?? { min: -238, max: 0 }; },\n  get Y() { return globalThis.__usermodBed?.Y ?? { min: -200, max: 0 }; } }`;
+const LIT_TOOL_COORD = `{\n  x: { min: -238, max: 10 },\n  y: { min: -200, max: 10 },\n  z: { min: -123, max: 0 }\n}`;
+const PATCHED_TOOL_COORD = `{ ${BED_MARKER}\n  get x() { return { min: globalThis.__usermodBed?.X.min ?? -238, max: 10 }; },\n  get y() { return { min: globalThis.__usermodBed?.Y.min ?? -200, max: 10 }; },\n  get z() { return globalThis.__usermodBed?.Z ?? { min: -123, max: 0 }; } }`;
 const BUILD_OPTIONS: BuildOption[] = [
   {
     id: "devtools",
@@ -105,48 +104,12 @@ const BUILD_OPTIONS: BuildOption[] = [
     revert: (s) => s.replace('env: { ...process.env, ENABLE_DOCS: "1" }, /* NEST-USERMOD-CAMDOCS */', "env: { ...process.env },")
   },
   {
-    /*
-     * The project model (saveCoordsSystemList), toolpath generation, preview face switcher and the machining
-     * queue all handle any number of sides already; the app only hides the Flip Setup "+" button once a second
-     * side exists and lays flip platforms out for exactly one RX and one RY position. These edits lift the
-     * button cap, tile extra platforms of the same direction further out, keep the direction badge for the
-     * last side, and make the generation order stable when several sides share a rank.
-     */
-    id: "multiSide",
-    cli: "multi-side",
-    label: "More than two machining sides",
-    description: "Keeps the Flip Setup \"+\" button after the second side and tiles extra flip platforms so any number of sides can be set up, generated, previewed and machined in sequence.",
-    marker: "/* NEST-USERMOD-MULTISIDE */",
-    target: "renderer",
+    id: "multiSide", cli: "multi-side", label: "More than two machining sides",
+    description: "Allows additional named flip setups and tiles their work platforms.",
+    marker: "/* NEST-USERMOD-MULTISIDE */", target: "renderer",
     assets: /^(PreparePageContent|engine-3d|FullApp)-.*\.js$/,
-    expectedMarkers: 9,
-    apply: (s) =>
-      s
-        // Prepare page: the "+" button and the direction badge.
-        .replace('items.length === 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")', 'items.length >= 1 /* NEST-USERMOD-MULTISIDE */ ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")')
-        .replace("coordsList.length !== 2) {", "coordsList.length < 2) { /* NEST-USERMOD-MULTISIDE */")
-        .replace("const direction = coordsList[1]?.flipDirection;", "const direction = coordsList[coordsList.length - 1]?.flipDirection; /* NEST-USERMOD-MULTISIDE */")
-        // 3D engine: flip platforms get a slot per direction so a third side does not land on the second.
-        .replace("function getFlipPlatformOffset(direction, dimensions) {", "function getFlipPlatformOffset(direction, dimensions, slot = 0) { /* NEST-USERMOD-MULTISIDE */")
-        .replace(/(function getFlipPlatformOffset\(direction, dimensions, slot = 0\) \{ \/\* NEST-USERMOD-MULTISIDE \*\/\s*const spacing = resolveFlipPlatformSpacing\(dimensions\))(;)/, "$1 * (slot + 1)$2")
-        .replace("const offset = getFlipPlatformOffset(spec.flipDirection, dimensions);", "const slot = specs.slice(0, specs.indexOf(spec)).filter((other) => other.flipDirection === spec.flipDirection).length; const offset = getFlipPlatformOffset(spec.flipDirection, dimensions, slot); /* NEST-USERMOD-MULTISIDE */")
-        .replace(/flipDirection: spec\.flipDirection,(\s*)platformGroup,/, "flipDirection: spec.flipDirection, slot, /* NEST-USERMOD-MULTISIDE */$1platformGroup,")
-        .replace("const offset = getFlipPlatformOffset(entry.flipDirection, dimensions);", "const offset = getFlipPlatformOffset(entry.flipDirection, dimensions, entry.slot ?? 0); /* NEST-USERMOD-MULTISIDE */")
-        .replace(/getFlipPlatformOffset\(\s*bottomEntry\.flipDirection,\s*stock\.stockDimensions\s*\)/, "getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions, bottomEntry.slot ?? 0) /* NEST-USERMOD-MULTISIDE */")
-        // App: deterministic generation order when several sides share a rank (list order wins).
-        .replace("rankCoordsForGeneration(left) - rankCoordsForGeneration(right));", "rankCoordsForGeneration(left) - rankCoordsForGeneration(right) || list2.indexOf(left) - list2.indexOf(right)); /* NEST-USERMOD-MULTISIDE */"),
-    revert: (s) =>
-      s
-        .replace('items.length >= 1 /* NEST-USERMOD-MULTISIDE */ ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")', 'items.length === 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { title: t("common.message.createNewSide")')
-        .replace("coordsList.length < 2) { /* NEST-USERMOD-MULTISIDE */", "coordsList.length !== 2) {")
-        .replace("const direction = coordsList[coordsList.length - 1]?.flipDirection; /* NEST-USERMOD-MULTISIDE */", "const direction = coordsList[1]?.flipDirection;")
-        .replace(/(function getFlipPlatformOffset\(direction, dimensions, slot = 0\) \{ \/\* NEST-USERMOD-MULTISIDE \*\/\s*const spacing = resolveFlipPlatformSpacing\(dimensions\)) \* \(slot \+ 1\);/, "$1;")
-        .replace("function getFlipPlatformOffset(direction, dimensions, slot = 0) { /* NEST-USERMOD-MULTISIDE */", "function getFlipPlatformOffset(direction, dimensions) {")
-        .replace("const slot = specs.slice(0, specs.indexOf(spec)).filter((other) => other.flipDirection === spec.flipDirection).length; const offset = getFlipPlatformOffset(spec.flipDirection, dimensions, slot); /* NEST-USERMOD-MULTISIDE */", "const offset = getFlipPlatformOffset(spec.flipDirection, dimensions);")
-        .replace(/flipDirection: spec\.flipDirection, slot, \/\* NEST-USERMOD-MULTISIDE \*\/(\s*)platformGroup,/, "flipDirection: spec.flipDirection,$1platformGroup,")
-        .replace("const offset = getFlipPlatformOffset(entry.flipDirection, dimensions, entry.slot ?? 0); /* NEST-USERMOD-MULTISIDE */", "const offset = getFlipPlatformOffset(entry.flipDirection, dimensions);")
-        .replace("getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions, bottomEntry.slot ?? 0) /* NEST-USERMOD-MULTISIDE */", "getFlipPlatformOffset(bottomEntry.flipDirection, stock.stockDimensions)")
-        .replace("rankCoordsForGeneration(left) - rankCoordsForGeneration(right) || list2.indexOf(left) - list2.indexOf(right)); /* NEST-USERMOD-MULTISIDE */", "rankCoordsForGeneration(left) - rankCoordsForGeneration(right));")
+    expectedMarkers: MULTISIDE_SITES,
+    apply: s => patchMultiSide(s, true), revert: s => patchMultiSide(s, false)
   },
   {
     /*
@@ -163,21 +126,11 @@ const BUILD_OPTIONS: BuildOption[] = [
     marker: BED_MARKER,
     target: "renderer",
     assets: /^(FullApp|DevicePage|engine-3d)-.*\.js$/,
-    expectedMarkers: 4,
-    apply: (s) => s.split(LIT_UPPER).join(PATCHED_UPPER).split(LIT_LOWER).join(PATCHED_LOWER).replace(LIT_PLATFORM, PATCHED_PLATFORM),
+    expectedMarkers: 5,
+    apply: (s) => s.split(LIT_UPPER).join(PATCHED_UPPER).split(LIT_LOWER).join(PATCHED_LOWER).replace(LIT_PLATFORM, PATCHED_PLATFORM)
+      .replace(LIT_XY, PATCHED_XY).replace(LIT_TOOL_COORD, PATCHED_TOOL_COORD),
     revert: (s) => s.split(PATCHED_UPPER).join(LIT_UPPER).split(PATCHED_LOWER).join(LIT_LOWER).replace(PATCHED_PLATFORM, LIT_PLATFORM)
-  },
-  {
-    id: "stockSim",
-    cli: "stock-sim",
-    label: "Material simulation",
-    description: "Turns on the app's own stock-removal view (the Preview tab gains a toolpath/material toggle). The final-geometry mod needs it to compute anything.",
-    marker: STOCKSIM_MARKER,
-    target: "renderer",
-    assets: /^FullApp-.*\.js$/,
-    expectedMarkers: 1,
-    apply: (s) => s.replace(LIT_STOCKSIM, PATCHED_STOCKSIM),
-    revert: (s) => s.replace(PATCHED_STOCKSIM, LIT_STOCKSIM)
+      .replace(PATCHED_XY, LIT_XY).replace(PATCHED_TOOL_COORD, LIT_TOOL_COORD)
   }
 ];
 const countMarkers = (source: string, marker: string): number => source.split(marker).length - 1;
@@ -197,6 +150,7 @@ interface Options {
   flags: Record<string, boolean | undefined>;
 }
 interface Stamp {
+  patchRevision?: string;
   sourceSha: string;
   packedSha: string;
   builtAt: string;
@@ -425,7 +379,7 @@ function patchBuildOptions(file: string, flags: Flags): void {
     const on = flags[o.id] === true;
     source = on ? o.apply(source) : o.revert(source);
     const present = source.includes(o.marker);
-    if (on && !present) warn(`${o.label}: anchors not found in out/main/index.js (app version changed?); option not applied`);
+    if (on && !present) fail(`${o.label}: anchors not found in out/main/index.js; refusing an incomplete build`);
     step(`${o.label}: ${on && present ? "ON" : "off"}`);
   }
   if (source !== original) fs.writeFileSync(file, source, "utf8");
@@ -449,7 +403,7 @@ function patchRendererOptions(assetsDir: string, flags: Flags): void {
       markers += countMarkers(next, o.marker);
     }
     const expected = o.expectedMarkers ?? 1;
-    if (on && markers < expected) warn(`${o.label}: only ${markers} of ${expected} anchors found in the renderer chunks (app version changed?); option incomplete`);
+    if (on && markers !== expected) fail(`${o.label}: only ${markers} of ${expected} anchors found in the renderer chunks (app version changed?); option incomplete`);
     if (!on && markers > 0) warn(`${o.label}: ${markers} marker(s) could not be reverted`);
     step(`${o.label}: ${on && markers >= expected ? "ON" : on ? "PARTIAL" : "off"}`);
   }
@@ -493,7 +447,9 @@ function patchMain(file: string): void {
     updated = source.startsWith('"use strict";') ? `"use strict";\n${inject}${source.slice('"use strict";'.length)}` : `${inject}\n${source}`;
     step("patched main process");
   }
+  updated = patchStreamExport(updated, LOADER_MAIN);
   if (updated !== source) fs.writeFileSync(file, updated, "utf8");
+  assertParses(file);
 }
 function patchPreload(file: string): void {
   const compiled = fs.readFileSync(LOADER_PRELOAD, "utf8");
@@ -541,6 +497,7 @@ function patchScene(assetsDir: string): void {
       if (simAnchor.test(source)) source = source.replace(simAnchor, `$1 (globalThis.__usermodSimRuntimes ??= new Set()).add(this); ${SIM_MARKER}$2`);
       else warn(`simulation runtime anchor not found in ${name}; cutter mods will be inactive`);
     }
+    source = patchCutter(patchStockExport(source));
     if (source !== original) {
       fs.writeFileSync(file, source, "utf8");
       assertParses(file);
@@ -561,9 +518,15 @@ function patchModelImporter(assetsDir: string): void {
   const candidates = fs.readdirSync(assetsDir).filter(name => /^FullApp-.*\.js$/.test(name));
   if (candidates.length !== 1) fail("Expected one FullApp renderer chunk for model import.");
   const file = path.join(assetsDir, candidates[0]!);
-  fs.writeFileSync(file, patchModelImport(fs.readFileSync(file, "utf8")), "utf8");
+  fs.writeFileSync(file, patchTools(patchModelImport(fs.readFileSync(file, "utf8"))), "utf8");
   assertParses(file);
   step("patched sequential model-import bridge");
+  const previewChunks = fs.readdirSync(assetsDir).filter(name => /^PreviewPage-.*\.js$/.test(name));
+  if (previewChunks.length !== 1) fail("Expected one PreviewPage renderer chunk.");
+  const previewFile = path.join(assetsDir, previewChunks[0]!);
+  fs.writeFileSync(previewFile, patchPreview(fs.readFileSync(previewFile, "utf8")), "utf8");
+  assertParses(previewFile);
+  step("patched Preview operation-row metadata");
 }
 
 /** Read the patches back out of the finished archive so a stale or skipped patch can never be installed. */
@@ -571,6 +534,8 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
   const read = (rel: string): string => asarLib.readEntry(archive, rel).toString("utf8");
   const main = read("out/main/index.js");
   const problems: string[] = [];
+  if (!main.includes(EXPORT_MARKER)) problems.push("streamed export commit hook missing");
+  if (flags.devtools && (!main.includes("const OPEN_DEV_TOOLS = true;") || /^\s*webContents\.closeDevTools\(\);/m.test(main))) problems.push("DevTools policy was not fully patched");
   if (!main.includes(MAIN_MARKER)) problems.push("loader require missing from out/main/index.js");
   if (!main.includes(JSON.stringify(LOADER_MAIN))) problems.push("loader path in out/main/index.js does not match this repo");
   for (const o of BUILD_OPTIONS) {
@@ -583,15 +548,20 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
   }
   const preload = read("out/preload/index.js");
   const fullApp = asarLib.list(archive).find(e => /^out\/renderer\/assets\/FullApp-.*\.js$/.test(e.path));
+  if (!fullApp || !read(fullApp.path).includes(TOOLS_MARKER)) problems.push("native tool-library bridge missing");
+  const preview = asarLib.list(archive).find(e => /^out\/renderer\/assets\/PreviewPage-.*\.js$/.test(e.path));
+  if (!preview || !read(preview.path).includes(PREVIEW_MARKER)) problems.push("Preview operation-row metadata missing");
   if (!fullApp || !read(fullApp.path).includes(MODEL_IMPORT_MARKER)) problems.push("sequential model-import bridge missing");
   if (!preload.includes(PRELOAD_BEGIN) || !preload.includes(PRELOAD_END)) problems.push("preload bridge block missing");
   if (!read("out/renderer/index.html").includes("script-src 'self' file:")) problems.push("CSP file: allowance missing");
   const engine = asarLib.list(archive).find((e) => /^out\/renderer\/assets\/engine-3d-.*\.js$/.test(e.path));
   if (engine) {
     const chunk = read(engine.path);
-    if (!chunk.includes(SCENE_MARKER)) warn("3D scene access marker missing from the engine chunk; view mods will report 'not patched in'");
-    if (!chunk.includes(SIM_MARKER)) warn("simulation runtime marker missing from the engine chunk; tool-visual will be inactive");
-  }
+    if (!chunk.includes(CUTTER_MARKER)) problems.push("cutter sample bridge missing");
+    if (!chunk.includes(STOCK_EXPORT_MARKER)) problems.push("stock export bridge missing");
+    if (!chunk.includes(SCENE_MARKER)) problems.push("3D scene access marker missing");
+    if (!chunk.includes(SIM_MARKER)) problems.push("simulation runtime marker missing");
+  } else problems.push("3D engine chunk missing");
   if (problems.length) fail(`packed archive failed verification:\n  - ${problems.join("\n  - ")}`);
   step("verified patches in the packed archive");
 }
@@ -607,6 +577,9 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
 
   // Content-based detection: a patched archive is never treated as the original.
   const stamp = readJson<Stamp | null>(STAMP_FILE, null);
+  const patchRevision = createHash("sha256").update([
+    __filename, path.join(__dirname, "compatibility.ts"), path.join(__dirname, "model-import.ts"), LOADER_PRELOAD
+  ].map(file => fs.readFileSync(file, "utf8")).join("\n")).digest("hex");
   const currentSha = sha256(asar);
   const installedMain = asarLib.readEntry(asar, "out/main/index.js").toString("utf8");
   const installedPatched = installedMain.includes(MAIN_MARKER);
@@ -615,7 +588,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   const loaderMatches = installedLoader !== null && installedLoader.toLowerCase() === LOADER_MAIN.toLowerCase();
   const flags = await resolveFlags(options, stamp);
   const flagsMatch = BUILD_OPTIONS.every((o) => (stamp?.flags?.[o.id] ?? false) === flags[o.id]);
-  if (!buildOnly && stamp && stamp.packedSha === currentSha && loaderMatches && flagsMatch && !options.force) {
+  if (!buildOnly && stamp && stamp.patchRevision === patchRevision && stamp.packedSha === currentSha && loaderMatches && flagsMatch && !options.force) {
     ok(`Installed app.asar already carries this loader and these build options (sha ${currentSha.slice(0, 12)}). Use --force to rebuild.`);
     return;
   }
@@ -628,7 +601,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   const sourceSha = sha256(sourceAsar);
   step(`source archive: ${sourceAsar} (sha ${sourceSha.slice(0, 12)})`);
 
-  const needExtract = options.force || !fs.existsSync(path.join(STAGING_DIR, "package.json")) || stamp?.sourceSha !== sourceSha;
+  const needExtract = options.force || stamp?.patchRevision !== patchRevision || !fs.existsSync(path.join(STAGING_DIR, "package.json")) || stamp?.sourceSha !== sourceSha;
   if (needExtract) {
     if (fs.existsSync(STAGING_DIR)) {
       step("removing previous staging dir");
@@ -656,7 +629,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   console.log(`    ${packed.files} files, ${(packed.payloadBytes / 1024 / 1024).toFixed(1)} MB payload -> ${PACKED_ASAR}`);
   verifyPacked(asarLib, PACKED_ASAR, flags);
   const packedSha = sha256(PACKED_ASAR);
-  writeText(STAMP_FILE, JSON.stringify({ sourceSha, packedSha, builtAt: new Date().toISOString(), flags } satisfies Stamp, null, 2));
+  writeText(STAMP_FILE, JSON.stringify({ sourceSha, packedSha, patchRevision, builtAt: new Date().toISOString(), flags } satisfies Stamp, null, 2));
   if (buildOnly) {
     ok(`Built ${PACKED_ASAR} for Nest Studio ${version} (not installed).`);
     return;

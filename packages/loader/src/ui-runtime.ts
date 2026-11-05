@@ -217,7 +217,7 @@
   const formatBytes = (n: number): string => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : n > 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
 
   const runtime: Usermod.Runtime = {
-    version: "0.3.0",
+    version: "0.4.0",
     registry,
     register,
     menu,
@@ -230,6 +230,16 @@
     modal,
     log,
     cam,
+    tools: {
+      async list() {
+        if (!globalThis.__usermodTools) throw new Error("Native tool-library bridge is unavailable; reinstall the 2.0 loader.");
+        return globalThis.__usermodTools.list();
+      },
+      async save(tool, replace, expectedVersion) {
+        if (!globalThis.__usermodTools) throw new Error("Native tool-library bridge is unavailable; reinstall the 2.0 loader.");
+        return globalThis.__usermodTools.save(tool, replace, expectedVersion);
+      }
+    },
     formatDuration,
     formatBytes,
     get api() {

@@ -46,10 +46,10 @@
       "path": "./mods/feeds-speeds/tsconfig.json"
     },
     {
-      "path": "./mods/final-geometry/tsconfig.main.json"
+      "path": "./mods/stock-export/tsconfig.main.json"
     },
     {
-      "path": "./mods/final-geometry/tsconfig.ui.json"
+      "path": "./mods/stock-export/tsconfig.ui.json"
     },
     {
       "path": "./mods/gcode-format/tsconfig.json"

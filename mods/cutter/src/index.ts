@@ -62,10 +62,8 @@
     if (Date.now() - libraryAt < 10000) return;
     libraryAt = Date.now();
     try {
-      const store = await window.api.store.read();
-      if (!store.ok) return;
       const next = new Map<number, NestStudio.Tool>();
-      for (const tool of store.data.toolLibary?.cutLibrarySettings ?? []) next.set(Number(tool.slotNum), tool);
+      for (const tool of await rt.tools.list()) if (tool.slotNum != null) next.set(Number(tool.slotNum), tool);
       library = next;
     } catch {
       /* keep the previous library */
@@ -97,7 +95,7 @@
     const lib = row?.toolNum !== null && row?.toolNum !== undefined ? library.get(row.toolNum) : undefined;
     const diameter = num(sceneMeta?.diameter) ?? num(lib?.diameter) ?? row?.diameter ?? undefined;
     if (!diameter) return null;
-    const kind = kindOf(typeof lib?.type === "string" ? lib.type : row?.typeText ?? sceneMeta?.toolType);
+    const kind = kindOf(sceneMeta?.toolType ?? (typeof lib?.type === "string" ? lib.type : row?.typeText));
     const fluteLength = num(sceneMeta?.bladeLength) ?? num(lib?.bladeLength) ?? diameter * 3;
     const shankDiameter = num(sceneMeta?.shankDiameter) ?? num(lib?.toolShankDiameter) ?? Math.max(diameter, 3.175);
     const totalLength = Math.min(settings.maxLengthMm, num(lib?.totalLength) ?? fluteLength * 2.2);
@@ -197,12 +195,16 @@
     const tool = runtime.cuttingTool;
     const mesh = tool?.mesh;
     if (!tool || !mesh) return; // bit STL still loading: retry on the next seek
-    const gcodeId = runtime.getSpatialGcodeIds()[Math.max(0, Math.floor(sampleIndex))] ?? null;
-    if (gcodeId === state.lastGcodeId) return;
+    const sample = runtime.usermodSample?.(sampleIndex);
+    const gcodeId = sample?.gcodeId ?? runtime.getSpatialGcodeIds()[Math.max(0, Math.floor(sampleIndex))] ?? null;
+    const sampleKey = `${gcodeId ?? ""}:${sample?.toolNumber ?? ""}`;
+    if (sampleKey === state.lastGcodeId) return;
     if (!state.original) state.original = mesh.geometry;
     void refreshLibrary();
-    state.lastGcodeId = gcodeId;
-    const spec = gcodeId ? specFor(gcodeId, state.tools.get(gcodeId)) : null;
+    state.lastGcodeId = sampleKey;
+    const meta = sample?.meta ?? (gcodeId ? state.tools.get(gcodeId) : undefined);
+    const numbered = sample?.toolNumber ? meta?.toolsByNumber?.[sample.toolNumber] : undefined;
+    const spec = gcodeId ? specFor(gcodeId, numbered ?? meta) : null;
     if (!spec) {
       restore(runtime, state);
       tool.root.scale.set(1, 1, 1);
@@ -241,13 +243,18 @@
         rt.log("warn", `cutter: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
-    runtime.resetStockRemoval = (toolsByGcodeId) => {
+    const applyPose = runtime.applyToolPose;
+    if (applyPose) runtime.applyToolPose = result => {
+      applyPose.call(runtime, result);
+      if (typeof result.sampleIndex === "number") safely(result.sampleIndex);
+    };
+    runtime.resetStockRemoval = (toolsByGcodeId, backend, sharedStock) => {
       state.tools = new Map(toolsByGcodeId);
       state.lastGcodeId = null;
-      return originals.resetStockRemoval.call(runtime, toolsByGcodeId);
+      return originals.resetStockRemoval.call(runtime, toolsByGcodeId, backend, sharedStock);
     };
-    runtime.seekSpatialSample = (sampleIndex) => {
-      const result = originals.seekSpatialSample.call(runtime, sampleIndex);
+    runtime.seekSpatialSample = (sampleIndex, options) => {
+      const result = originals.seekSpatialSample.call(runtime, sampleIndex, options);
       safely(sampleIndex);
       return result;
     };

@@ -1,13 +1,12 @@
 {
-  "$comment": "Nest Studio versions the installer patches have been verified against. The installer warns and asks (or requires --allow-untested) for any other version. Add a version here after checking: app starts, MODS button appears, usermod.log shows the loader, DevTools/CAM-docs anchors still found.",
+  "$comment": "Versions validated by archive patch verification and the regression suite. GUI/CAM/machine smoke tests are separate checks; old-version notes are historical.",
   "tested": [
-    "1.1.0",
-    "1.1.1",
-    "1.2.0"
+    "2.0.0"
   ],
   "notes": {
     "1.1.0": "Initial target. Electron 39.8.10.",
     "1.1.1": "Auto-update on 2026-09-08. All patch anchors unchanged (OPEN_DEV_TOOLS, closeDevTools hook, CAM spawn env, preload, CSP).",
-    "1.2.0": "Verified 2026-09-16 against the 1.2.0 installer and the 1.1.0 baseline. Electron 39.8.10. Every patch anchor still matches (main marker, devtools x2, cam-docs, preload, CSP, scene, sim-runtime, model-import, multi-side 9/9, bed-size 4/4, stock-sim). window.api only gained auth.*; IPC channel set, hooked handler signatures, device.ipc chunk, CAM endpoints and renderer anchors are unchanged. New in 1.2.0: app IPC handlers reject invokes from frames outside out/renderer (mod UI runs in the app frame, so unaffected); CAM restart waits for port 9630 to free up (toolpath-modifiers uses protocol.handle, no port). The vendor also dropped resources/ArcWelder.exe and its Arc fitting checkbox; the arc-fit mod was removed from this repo on 2026-09-17 in response."
+    "1.2.0": "Verified 2026-09-16 against the 1.2.0 installer and the 1.1.0 baseline. Electron 39.8.10. Every patch anchor still matches (main marker, devtools x2, cam-docs, preload, CSP, scene, sim-runtime, model-import, multi-side 9/9, bed-size 4/4, stock-sim). window.api only gained auth.*; IPC channel set, hooked handler signatures, device.ipc chunk, CAM endpoints and renderer anchors are unchanged. New in 1.2.0: app IPC handlers reject invokes from frames outside out/renderer (mod UI runs in the app frame, so unaffected); CAM restart waits for port 9630 to free up (toolpath-modifiers uses protocol.handle, no port). The vendor also dropped resources/ArcWelder.exe and its Arc fitting checkbox; the arc-fit mod was removed from this repo on 2026-09-17 in response.",
+    "2.0.0": "Validated 2026-11-05 against the installed vendor archive: required bridges, native streamed export commit, 5/5 multi-side and 5/5 bed-size sites, syntax, loader harness, export/bridge regressions and PCB regressions. New native simulation/inspection replaces stock-sim and the legacy analyzer; stock-export retains height-field STL. Tool library now uses the CAM controller; file-backed STL/relief/STEP toolpaths are intercepted. Installed archive and original backup hashes verified; startup confirmed on Electron 44.4.5 with loader 0.4.0, all enabled UI mods registered and no loader warnings/errors. Interactive GUI automation unavailable because the Windows helper cannot start; no live machining test performed. Earlier app versions are no longer targets for the 0.4 installer."
   }
 }

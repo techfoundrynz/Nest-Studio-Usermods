@@ -1,9 +1,9 @@
 /*
- * Final geometry (main): writes the machined-stock height field the UI half extracted from the simulation as a
+ * Stock export (main): writes the machined-stock height field the UI half extracted from the simulation as a
  * binary STL. Top surface per solid column, vertical walls where a solid cell meets a cut-through cell or the
  * stock edge, and a flat bottom, so slicers and CAD see a closed solid.
  *
- * IPC: final:export-stl({ filePath, nx, ny, minX, minY, dx, dy, minZ, stride, heights: Float32Array }) → { path, triangles }
+ * IPC: stock:export-stl({ filePath, nx, ny, minX, minY, dx, dy, minZ, stride, heights: Float32Array }) → { path, triangles }
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -114,13 +114,13 @@ function buildStl(r: ExportRequest): Buffer {
       if (!cell(ix + 1, iy)) w.quad(x1, y0, minZ, x1, y1, minZ, x1, y1, H(ix + 1, iy + 1), x1, y0, H(ix + 1, iy)); // +X side
     }
   }
-  return w.toBuffer(`Nest Studio usermod final-geometry ${cols}x${rows}`);
+  return w.toBuffer(`Nest Studio usermod stock-export ${cols}x${rows}`);
 }
 
 const mod: Usermod.MainMod = {
-  description: "Binary STL writer for the simulated machined stock (final:export-stl)",
+  description: "Binary STL writer for the simulated machined stock (stock:export-stl)",
   activate(api) {
-    api.handle("final:export-stl", (raw: unknown) => {
+    api.handle("stock:export-stl", (raw: unknown) => {
       const req = parseRequest(raw);
       const dir = path.dirname(req.filePath);
       if (!fs.existsSync(dir)) throw new Error(`folder does not exist: ${dir}`);

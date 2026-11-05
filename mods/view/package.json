@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "description": "3D view: isometric projection and camera presets, plus toolpath colouring by depth or operation",
+  "description": "Narrow-FOV projection, extra camera directions, depth colouring and hover highlighting alongside native view controls",
   "usermod": {
     "name": "view",
     "ui": "dist/index.js",
     "order": 12,
-    "description": "3D view: isometric projection and camera presets, plus toolpath colouring by depth or operation"
+    "description": "Narrow-FOV projection, extra camera directions, depth colouring and hover highlighting alongside native view controls"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

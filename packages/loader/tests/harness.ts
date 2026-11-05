@@ -69,6 +69,8 @@ moduleInternals._load = function (this: unknown, request: string, ...rest: unkno
 const rootDir = path.resolve(__dirname, "..", "..", "..", "..");
 const configPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "usermod-test-")), "mods.json");
 process.env.USERMOD_CONFIG = configPath;
+process.env.USERMOD_DATA_DIR = path.join(path.dirname(configPath), "data");
+process.env.USERMOD_LOG_FILE = path.join(path.dirname(configPath), "usermod.log");
 fs.copyFileSync(path.join(rootDir, "mods.default.json"), configPath);
 process.on("exit", () => fs.rmSync(path.dirname(configPath), { recursive: true, force: true }));
 
@@ -78,6 +80,7 @@ interface MigrationForTest {
 }
 const loader = require(path.join(__dirname, "..", "main.js")) as {
   ROOT_DIR: string;
+  DATA_DIR: string;
   CONFIG_FILE: string;
   applyMigrations(config: Usermod.Config, migrations: Record<string, MigrationForTest>): { config: Usermod.Config; changed: string[] };
 };
@@ -159,7 +162,7 @@ void (async () => {
   // export-report checks: 18 mm stock from the header, a cut to Z-25 and a low rapid are reported, nothing is changed.
   const deep = ['({"machineModel":"C500","stockSize":"600*400*18"})', "G21 G90", "G0 X0 Y0 Z5", "G1 Z-25 F300", "G1 X10 Y10", "G0 X50 Y50", "M30", ""].join("\n");
   await invoke("store:write-file", `${downloads}deep.nc`, deep);
-  const guard = JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")) as { stockThickness: number | null; issues: { kind: string; count: number }[] };
+  const guard = JSON.parse(fs.readFileSync(path.join(loader.DATA_DIR, "reports", "latest.json"), "utf8")) as { stockThickness: number | null; issues: { kind: string; count: number }[] };
   check("export read the stock thickness from the header and flagged below-stock + low rapid", guard.stockThickness === 18 && guard.issues.some((i) => i.kind === "below-stock") && guard.issues.some((i) => i.kind === "low-rapid"), JSON.stringify(guard.issues));
   check("export checks do not modify the program", written!.data.includes("G1 Z-25 F300") && !written!.data.includes("usermod depth"));
   // tool-split: a real temp folder so the per-tool files can be written next to the export.
@@ -182,7 +185,7 @@ void (async () => {
   await invoke("store:write-file", `${downloads}previewed.nc`, previewed);
   check("export skips processors already applied at preview", (written!.data.match(/\(usermod peck-drill: /g)?.length ?? 0) === 1 && written!.data.includes("(--- Nest Studio usermod ---)"), written!.data.split("\n").slice(0, 4).join(" | "));
   const modStatus = data(await invoke<{ intercepting: boolean; reason: string | null }>("usermod:modifiers:status"));
-  check("toolpath-modifiers stays passive under the harness", modStatus.intercepting === false && modStatus.reason === "harness run", JSON.stringify(modStatus));
+  check("toolpath-modifiers registers file-backed hooks under the harness", modStatus.intercepting === true && modStatus.reason === null, JSON.stringify(modStatus));
   await invoke("usermod:set-settings", "toolpath-modifiers", { preview: [] });
   await invoke("store:write-file", `${downloads}two.nc`, big); // later checks read the report of the last two-tool export
 
@@ -203,13 +206,13 @@ void (async () => {
 
   const info = data(await invoke<Usermod.Info>("usermod:info"));
   check("enabled postprocessors in manifest order", JSON.stringify(info.postprocessors.map((p) => p.name)) === JSON.stringify(["feed-scale", "tool-change", "program-header", "safe-shutdown", "peck-drill", "gcode-format", "tool-split", "export"]), info.postprocessors.map((p) => p.name).join(","));
-  check("export wrote latest.json", fs.existsSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json")) && JSON.parse(fs.readFileSync(path.join(loader.ROOT_DIR, "data", "reports", "latest.json"), "utf8")).tools.includes(2));
+  check("export wrote latest.json", fs.existsSync(path.join(loader.DATA_DIR, "reports", "latest.json")) && JSON.parse(fs.readFileSync(path.join(loader.DATA_DIR, "reports", "latest.json"), "utf8")).tools.includes(2));
   check("gcode-format is a no-op until one of its features is switched on", !out.includes("N10 ") && out.includes("(File: part.nc)"));
   check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "mods-menu")?.core === true && info.available.find((m) => m.name === "peck-drill")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("view") === "ui" && reloadOf("jobs") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
-  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "final-geometry", "jobs", "lan-monitor", "machine-state", "pcb-import", "project-backup", "timelapse", "toolpath-modifiers"]), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "feeds-speeds", "final-geometry", "gcode-lab", "jobs", "jog", "lan-monitor", "mods-menu", "overrides", "pcb-import", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"]), info.uiMods.map((m) => m.name).join(","));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "stock-export", "jobs", "lan-monitor", "machine-state", "pcb-import", "project-backup", "timelapse", "toolpath-modifiers"].sort()), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "feeds-speeds", "stock-export", "gcode-lab", "jobs", "jog", "lan-monitor", "mods-menu", "overrides", "pcb-import", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"].sort()), info.uiMods.map((m) => m.name).join(","));
 
   // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
   let dialogArgs: unknown[] = [];
@@ -222,12 +225,12 @@ void (async () => {
   check("export-filename intercepts dialog:show-save (template {name} keeps the name)", rewritten === "Bitcoin.nc", rewritten);
   await invoke("dialog:show-save", { defaultPath: "proj.zip", filters: [{ name: "zip", extensions: ["zip"] }] });
   check("export-filename leaves non-gcode dialogs alone", (dialogArgs[0] as { defaultPath?: string }).defaultPath === "proj.zip");
-  const zipPath = path.join(loader.ROOT_DIR, "data", "harness-project.zip");
+  const zipPath = path.join(loader.DATA_DIR, "harness-project.zip");
   fs.writeFileSync(zipPath, "PK-fake");
   fakeElectron.ipcMain.handle("store:write-binary-file", (_e, _p, _b) => ({ ok: true }));
   await invoke("store:write-binary-file", zipPath, Buffer.from("PK-fake"));
   await new Promise((r) => setTimeout(r, 50));
-  const backupDir = path.join(loader.ROOT_DIR, "data", "backups", "harness-project");
+  const backupDir = path.join(loader.DATA_DIR, "backups", "harness-project");
   check("project-backup copied the saved zip", fs.existsSync(backupDir) && fs.readdirSync(backupDir).some((f) => f.endsWith(".zip")));
   fs.rmSync(zipPath, { force: true });
   fs.rmSync(backupDir, { recursive: true, force: true });
@@ -286,7 +289,7 @@ void (async () => {
   check("write-file confined to data dir", wf.ok && wf.data.endsWith(`${sep}data${sep}test${sep}hello.txt`));
   const wf2 = await invoke("usermod:write-file", `..${sep}..${sep}mods.json`, "x");
   check("write-file escaping data dir rejected", !wf2.ok);
-  fs.rmSync(path.join(loader.ROOT_DIR, "data", "test"), { recursive: true, force: true });
+  fs.rmSync(path.join(loader.DATA_DIR, "test"), { recursive: true, force: true });
 
   const ping = data(await invoke<{ pong: unknown; appVersion: string }>("usermod:tools:ping", "yo"));
   check("app-tools ping", ping.pong === "yo" && ping.appVersion === "1.1.0-test");
@@ -301,7 +304,21 @@ void (async () => {
   check("run-postprocessors manual", rp.includes("(File: x.nc)"));
   const rl = data(await invoke<Usermod.Info>("usermod:reload"));
   check("reload ok", rl.postprocessors.length === 8);
-  fs.rmSync(path.join(loader.ROOT_DIR, "data", "reports"), { recursive: true, force: true });
+  fs.rmSync(path.join(loader.DATA_DIR, "reports"), { recursive: true, force: true });
+
+  // Nest Studio 2.0 file-backed results: nested G-code and STEP NC reads are transformed.
+  await invoke("usermod:set-settings", "feed-scale", { feedFactor: 2 });
+  await invoke("usermod:set-settings", "toolpath-modifiers", { preview: ["feed-scale"] });
+  const camResult = { schema: "stl-toolpath-v2", tool_path: [{ gcode: "G1 X1 F100\n", operation_id: "op" }], metadata: "untouched" };
+  fakeElectron.ipcMain.handle("cam:read-toolpaths", () => ({ ok: true, data: camResult }));
+  fakeElectron.ipcMain.handle("cam:read-process-tree", (_event, file) => ({ ok: true, data: String(file).endsWith(".nc") ? "G1 X1 F100\n" : "{\"operations\":[]}" }));
+  const transformed = data(await invoke<typeof camResult>("cam:read-toolpaths", "result.json"));
+  check("file-backed CAM toolpaths are transformed", transformed.tool_path[0]!.gcode.includes("F200") && transformed.metadata === "untouched" && camResult.tool_path[0]!.gcode.includes("F100"));
+  const stepNc = data(await invoke<string>("cam:read-process-tree", "operation.nc"));
+  check("STEP NC text is transformed", stepNc.includes("F200"));
+  check("process-tree metadata stays unchanged", data(await invoke<string>("cam:read-process-tree", "plan.json")) === "{\"operations\":[]}");
+  const exportedOnce = data(await invoke<string>("usermod:run-postprocessors", "export", stepNc, { fileName: "once.nc" }));
+  check("preview-applied feed scaling is not repeated at export", exportedOnce.includes("F200") && !exportedOnce.includes("F400"));
 
   const noise = data(await invoke<Usermod.Info>("usermod:info")).errors.filter((e) => !/^ipc:(read-file|write-file|set-settings|set-enabled)$|^mod-ipc:app-tools:tools:open-url/.test(e.scope));
   check("no unexpected loader errors", noise.length === 0, JSON.stringify(noise));
