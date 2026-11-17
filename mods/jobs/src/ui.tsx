@@ -50,6 +50,7 @@
   window.usermod.on<{ kind: string; title: string; body: string }>("jobs:event", (e) => {
     rt.toast(`${e.title}: ${e.body}`, { kind: e.kind === "error" ? "error" : e.kind === "pause" ? "warn" : "success", duration: 6000 });
   });
+  let refreshPillSettings: () => Promise<void>;
 
   function Panel(): React.JSX.Element {
     const status = useInvoke<Status>("jobs:status");
@@ -158,10 +159,13 @@
             { key: "silent", label: "Silent notifications (no sound)", type: "boolean" },
             { key: "keep", label: "History records to keep", type: "number", min: 10, step: 50 },
             { key: "hud", label: "Show the status pill on screen", type: "boolean" },
-            { key: "hudPosition", label: "Pill position", type: "select", options: [{ label: "Bottom left", value: "bottom-left" }, { label: "Bottom right", value: "bottom-right" }, { label: "Top right", value: "top-right" }] },
+            { key: "hudPosition", label: "Pill position", type: "select", help: "Drag the pill to save a custom position, or choose a preset to reset it.", options: [{ label: "Bottom left", value: "bottom-left" }, { label: "Bottom right", value: "bottom-right" }, { label: "Top right", value: "top-right" }, { label: "Custom (dragged)", value: "custom" }] },
             { key: "hudWhenDisconnected", label: "Show the pill while disconnected", type: "boolean" }
           ]}
-          onSaved={() => call("jobs:reload-settings")}
+          onSaved={async () => {
+            await call("jobs:reload-settings");
+            await refreshPillSettings();
+          }}
         />
       </>
     );
@@ -176,13 +180,23 @@
     onClick: openJobs
   });
 
-  /* The status pill (was the status-hud mod): an always-visible summary that opens this window when clicked. */
+  /* Machine-status summary: hidden until settings and valid machine state are available. */
   (function statusPill(): void {
-      let settings = { enabled: true, position: "bottom-left", showWhenDisconnected: true };
+      interface Point { x: number; y: number; }
+      let settings: { enabled: boolean; position: string; showWhenDisconnected: boolean; point: Point | null } = {
+        enabled: true, position: "bottom-left", showWhenDisconnected: false, point: null
+      };
+      let settingsLoaded = false;
       let last: Usermod.MachineState | null = null;
+      let drag: { pointerId: number; startX: number; startY: number; left: number; top: number; point: Point; moved: boolean } | null = null;
+      let ignoreClick = false;
+      let savingPosition = Promise.resolve();
 
       rt.addStyle(
-        `#usermod-hud{position:fixed;z-index:2147482500;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(24,24,24,.88);color:#fff;font:12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:pointer;user-select:none;backdrop-filter:blur(4px)}
+        `#usermod-hud{position:fixed;z-index:2147482500;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(24,24,24,.88);color:#fff;font:12px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35);cursor:grab;user-select:none;touch-action:none;backdrop-filter:blur(4px);max-width:calc(100vw - 16px);box-sizing:border-box}
+         #usermod-hud[hidden]{display:none!important}
+         #usermod-hud[data-dragging]{cursor:grabbing}
+         #usermod-hud .label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
          #usermod-hud[data-pos="bottom-left"]{left:16px;bottom:16px}#usermod-hud[data-pos="bottom-right"]{right:16px;bottom:16px}#usermod-hud[data-pos="top-right"]{right:120px;top:52px}
          #usermod-hud .dot{width:8px;height:8px;border-radius:50%;background:#9e9e9e;flex:none}
          #usermod-hud[data-phase="running"] .dot{background:#22c55e;box-shadow:0 0 6px #22c55e}#usermod-hud[data-phase="paused"] .dot{background:#f59e0b}#usermod-hud[data-phase="alarm"] .dot{background:#ef4444}
@@ -191,23 +205,82 @@
         "status-hud"
       );
       const dot = rt.el("span", { class: "dot" });
-      const text = rt.el("span");
+      const text = rt.el("span", { class: "label" });
       const fill = rt.el("i");
       const bar = rt.el("span", { class: "bar" }, [fill]);
       const eta = rt.el("span", { class: "muted" });
-      const hud = rt.el("div", { id: "usermod-hud", "data-pos": settings.position, "data-phase": "disconnected", title: "Machine status (click for the jobs window)", onClick: () => openJobs() }, [dot, text, bar, eta]);
+      const hud = rt.el("div", { id: "usermod-hud", "data-pos": settings.position, "data-phase": "disconnected", title: "Machine status (drag to move; click for Jobs)", onClick: () => {
+        if (ignoreClick) { ignoreClick = false; return; }
+        openJobs();
+      } }, [dot, text, bar, eta]);
       hud.hidden = true;
       document.body.appendChild(hud);
+
+      function place(point: Point): Point {
+        const bounds = hud.getBoundingClientRect();
+        const x = Math.round(Math.max(8, Math.min(point.x, Math.max(8, window.innerWidth - bounds.width - 8))));
+        const y = Math.round(Math.max(8, Math.min(point.y, Math.max(8, window.innerHeight - bounds.height - 8))));
+        hud.dataset.pos = "custom";
+        Object.assign(hud.style, { left: `${x}px`, top: `${y}px`, right: "auto", bottom: "auto" });
+        return { x, y };
+      }
+      function position(): void {
+        hud.dataset.pos = settings.position;
+        if (drag?.moved) drag.point = place(drag.point);
+        else if (settings.position === "custom" && settings.point) place(settings.point);
+        else for (const key of ["left", "top", "right", "bottom"]) hud.style.removeProperty(key);
+      }
+      const savePosition = (point: Point): void => {
+        // Read fresh settings and serialize drops so a slow save cannot overwrite a newer position.
+        savingPosition = savingPosition.then(async () => {
+          const info = await window.usermod.info();
+          if (!info.ok) throw new Error(info.message);
+          const mine = info.data.config.settings["jobs"] ?? {};
+          const saved = await window.usermod.setSettings("jobs", { ...mine, hudPosition: "custom", hudX: point.x, hudY: point.y });
+          if (!saved.ok) throw new Error(saved.message);
+        }).catch(error => rt.toast(`Could not save pill position: ${error instanceof Error ? error.message : String(error)}`, { kind: "error" }));
+      };
+      hud.addEventListener("pointerdown", event => {
+        if (hud.hidden || event.button !== 0 || !event.isPrimary) return;
+        ignoreClick = false;
+        const bounds = hud.getBoundingClientRect();
+        drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: bounds.left, top: bounds.top, point: { x: bounds.left, y: bounds.top }, moved: false };
+        try { hud.setPointerCapture(event.pointerId); } catch { /* synthetic events or unavailable capture */ }
+      });
+      hud.addEventListener("pointermove", event => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const dx = event.clientX - drag.startX, dy = event.clientY - drag.startY;
+        if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+        drag.moved = true;
+        hud.dataset.dragging = "true";
+        drag.point = place({ x: drag.left + dx, y: drag.top + dy });
+      });
+      const finishDrag = (event: PointerEvent, save: boolean): void => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        const gesture = drag;
+        drag = null;
+        delete hud.dataset.dragging;
+        ignoreClick = gesture.moved;
+        try { hud.releasePointerCapture(event.pointerId); } catch { /* capture may already be lost */ }
+        if (gesture.moved && save) {
+          settings = { ...settings, position: "custom", point: gesture.point };
+          savePosition(gesture.point);
+        }
+        position();
+      };
+      hud.addEventListener("pointerup", event => finishDrag(event, true));
+      hud.addEventListener("pointercancel", event => finishDrag(event, false));
+      hud.addEventListener("lostpointercapture", event => finishDrag(event, false));
+      window.addEventListener("resize", position);
 
       const fmt = (s: number | null): string => (s === null ? "" : rt.formatDuration(s));
       const capitalise = (text: string): string => (text ? text[0]!.toUpperCase() + text.slice(1) : text);
       function render(s: Usermod.MachineState): void {
         last = s;
-        hud.dataset.pos = settings.position;
         hud.dataset.phase = s.phase;
-        const visible = settings.enabled && (s.connected || settings.showWhenDisconnected);
+        const visible = settingsLoaded && settings.enabled && (s.connected || settings.showWhenDisconnected);
         hud.hidden = !visible;
-        if (!visible) return;
+        if (!visible) { position(); return; }
         const name = s.job.fileName ?? "";
         const pct = s.progress !== null ? `${Math.round(s.progress * 100)}%` : "";
         // Always name the machine state: an empty pill looks like the mod is broken.
@@ -216,15 +289,40 @@
         bar.hidden = s.progress === null;
         fill.style.width = `${Math.round((s.progress ?? 0) * 100)}%`;
         eta.textContent = s.phase === "running" && s.etaSeconds ? `${fmt(s.etaSeconds)} left` : s.phase !== "idle" && s.elapsedSeconds ? fmt(s.elapsedSeconds) : "";
+        position();
       }
-      void window.usermod.info().then((r) => {
-        if (r.ok) {
+      refreshPillSettings = async () => {
+        try {
+          const r = await window.usermod.info();
+          settingsLoaded = r.ok;
+          if (!r.ok) { hud.hidden = true; return; }
           const mine = r.data.config.settings["jobs"] ?? {};
-          settings = { enabled: mine.hud !== false, position: String(mine.hudPosition ?? "bottom-left"), showWhenDisconnected: mine.hudWhenDisconnected !== false };
+          const point = typeof mine.hudX === "number" && Number.isFinite(mine.hudX) && typeof mine.hudY === "number" && Number.isFinite(mine.hudY)
+            ? { x: mine.hudX, y: mine.hudY } : null;
+          settings = {
+            enabled: mine.hud !== false,
+            position: mine.hudPosition === "custom" && point ? "custom" : mine.hudPosition === "bottom-right" || mine.hudPosition === "top-right" ? mine.hudPosition : "bottom-left",
+            showWhenDisconnected: mine.hudWhenDisconnected === true,
+            point
+          };
+          if (last) render(last);
+        } catch {
+          settingsLoaded = false;
+          hud.hidden = true;
         }
-        return window.usermod.invoke<Usermod.MachineState>("machine:state").then((s) => s.ok && render(s.data));
-      });
+      };
+      const pollState = async (): Promise<void> => {
+        try {
+          const state = await window.usermod.invoke<Usermod.MachineState>("machine:state");
+          if (state.ok) render(state.data);
+          else { last = null; hud.hidden = true; }
+        } catch {
+          last = null;
+          hud.hidden = true;
+        }
+      };
+      void refreshPillSettings().then(pollState);
       window.usermod.on<Usermod.MachineState>("machine:state", render);
-      setInterval(() => void window.usermod.invoke<Usermod.MachineState>("machine:state").then((s) => s.ok && render(s.data)), 5000);
+      setInterval(() => void pollState(), 5000);
   })();
 })();

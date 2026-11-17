@@ -165,7 +165,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `view` | ui | 3D view enhancements: narrow-FOV projection, Right/Back/Left directions, depth colouring and hover highlight |
 | `bed-size` | ui | The machine travel and 3D platform size the app assumes, instead of its built-in 238 x 200 x 123 mm (needs `--bed-size`) |
 | `app-tools` | main + ui | Log and user-data folders, CAM service status and API docs, developer shortcuts (`Ctrl+Shift+M/R/L`, `F12`) |
-| `jobs` | main + ui | Job lifecycle: desktop toast and webhook when a run finishes, alarms or pauses; run history with CSV export; the on-screen status pill |
+| `jobs` | main + ui | Job lifecycle: desktop toast and webhook when a run finishes, alarms or pauses; run history with CSV export; a draggable machine-status pill with saved position, hidden while disconnected by default |
 | `jog` | ui | Keyboard (arrows / PgUp / PgDn, Escape stops) and game-controller jogging over one guarded jog engine |
 | `work-zero` | ui | Work offsets (G54-G59, set zero here, named machine positions) and the touch-plate Z probing wizard |
 | `overrides` | ui | Feed and spindle override percentages using the machine's own `0xCx` / `0xDx` commands, with the live readout |

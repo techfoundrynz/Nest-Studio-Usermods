@@ -118,7 +118,7 @@
       "keep": 500,
       "hud": true,
       "hudPosition": "bottom-left",
-      "hudWhenDisconnected": true
+      "hudWhenDisconnected": false
     },
     "app-tools": {
       "shortcuts": true,
