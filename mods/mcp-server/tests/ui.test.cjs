@@ -30,6 +30,12 @@ test('renderer uses native APIs, preserves magazine slots, checks versions and c
   await run('save_tool', { replace: false, tool: { id: 'new', slotNum: 99 } });
   assert.equal(calls.at(-1)[1].slotNum, null);
   await assert.rejects(run('validate_gcode', { gcode: 'M5' }), /CAM unavailable/);
+  ctx.window.api.gcode.validate = async (gcode, slots) => {
+    assert.equal(gcode, 'M06 T3');
+    assert.deepEqual(Array.from(slots), ['3', '03']);
+    return ok({ result: { has_err: false, tokens: [] } });
+  };
+  assert.equal((await run('validate_gcode', { gcode: 'M06 T3' })).result.has_err, false);
   await assert.rejects(run('get_project', { projectId: 'p' }), /Prepare page/);
   await assert.rejects(run('open_file', { name: 'Upper.step', base64: '' }), /model-import bridge unavailable/);
   ctx.atob = atob; ctx.File = File;

@@ -67,7 +67,7 @@ shown in the panel. Disabling a main mod takes effect after restarting Nest Stud
 | `start_machining` | Native machining flow with inspection, readiness checks and centering |
 | `connect_machine`, `disconnect_machine` | Native device API; LAN connect takes IP and six-digit access code |
 | `send_machine_command` | One exact text command, including G-code; requires a connected machine and a local approval dialog showing the command; rechecks the connection before sending |
-| `validate_gcode`, `estimate_gcode_time` | Native services without executing a program |
+| `validate_gcode`, `estimate_gcode_time` | Native services without executing a program; validation supplies current mounted tool slots and their zero-padded aliases |
 | `list_jobs` | Job history when `jobs` is enabled; otherwise an explicit unavailable result |
 
 Generation, stock changes, export and machining can return `workflow_requested`. They can open native dialogs
@@ -78,6 +78,9 @@ After `generate_toolpaths`, poll `get_cam_state` until `planned` is true, review
 `generate_planned_toolpaths` to complete generation without manually pressing the dialog's Generate button.
 
 ## Machining workflows
+
+Raw-text validation requests are limited to 512 KiB. Larger complete programs need Nest Studio's native
+G-code import/run validation; validating smaller fragments does not establish whole-program validity.
 
 3-axis smart milling supports both faces and carving. Native custom contour, pocket, drilling, chamfer
 and thread operations use `begin_operation` with setup/model IDs. Poll `get_operation_editor` until

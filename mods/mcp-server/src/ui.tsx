@@ -37,7 +37,16 @@
         if (!expected || expected.address !== (current.address ?? null) || expected.connectionType !== (current.connectionType ?? null)) throw Error("Machine connection changed during approval; no command was sent");
         return unwrap(await window.api.device.sendMessage({ type: "text", payload: String(args.command) }));
       }
-      case "validate_gcode": return unwrap(await window.api.gcode.validate(String(args.gcode)));
+      case "validate_gcode": {
+        const slots = new Set<string>();
+        for (const tool of await rt.tools.list()) {
+          if (typeof tool.slotNum === "number" && tool.slotNum >= 1 && tool.slotNum <= 5) {
+            slots.add(String(tool.slotNum));
+            slots.add(`0${tool.slotNum}`);
+          }
+        }
+        return unwrap(await window.api.gcode.validate(String(args.gcode), [...slots].sort((a, b) => Number(a) - Number(b))));
+      }
       case "estimate_gcode_time": return unwrap(await window.api.gcode.estimatedTime(String(args.gcode)));
       default: {
         const bridge = (globalThis as unknown as { __usermodMcpProject?: NativeProjectBridge }).__usermodMcpProject;
