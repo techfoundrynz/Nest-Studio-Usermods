@@ -3,10 +3,47 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 require('tsx/cjs');
 const { list, readEntry } = require('../../asar/dist/index.js');
-const { patchStockExport } = require('../src/compatibility.ts');
+const { patchStockExport, patchStreamExport, patchTools, patchCutter, patchPreview, patchMultiSide, MULTISIDE_SITES,
+  EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, CUTTER_MARKER, PREVIEW_MARKER, MULTISIDE_MARKER } = require('../src/compatibility.ts');
+const { patchModelImport, MODEL_IMPORT_MARKER } = require('../src/model-import.ts');
 const archive = process.env.NEST_TEST_ASAR || 'C:/Program Files/nest-studio/resources/app.asar';
+
+test('installed vendor archive accepts all required bridges and multi-side patches without syntax errors', { skip: !fs.existsSync(archive) }, t => {
+  const entries = list(archive);
+  const read = pattern => {
+    const matches = entries.filter(entry => pattern.test(entry.path));
+    assert.equal(matches.length, 1, `one matching chunk: ${pattern}`);
+    return readEntry(archive, matches[0].path).toString('utf8');
+  };
+  const main = patchStreamExport(read(/^out\/main\/index\.js$/), 'C:/test/loader.js');
+  const full = patchTools(patchModelImport(read(/^out\/renderer\/assets\/FullApp-.*\.js$/)));
+  const engine = patchCutter(patchStockExport(read(/^out\/renderer\/assets\/engine-3d-.*\.js$/)));
+  const preview = patchPreview(read(/^out\/renderer\/assets\/PreviewPage-.*\.js$/));
+  for (const [source, marker] of [[main, EXPORT_MARKER], [full, TOOLS_MARKER], [full, MODEL_IMPORT_MARKER], [engine, STOCK_EXPORT_MARKER], [engine, CUTTER_MARKER], [preview, PREVIEW_MARKER]]) {
+    assert.ok(source.includes(marker), marker);
+  }
+  assert.equal(patchTools(full), full);
+  assert.equal(patchModelImport(full), full);
+  assert.equal(patchCutter(engine), engine);
+  assert.equal(patchStockExport(engine), engine);
+  assert.equal(patchPreview(preview), preview);
+  const prepare = read(/^out\/renderer\/assets\/PreparePageContent-.*\.js$/);
+  const renderer = [full, engine, prepare].map(source => patchMultiSide(source, true));
+  assert.equal(renderer.reduce((sum, source) => sum + source.split(MULTISIDE_MARKER).length - 1, 0), MULTISIDE_SITES);
+  for (const source of renderer) assert.equal(patchMultiSide(source, true), source);
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nest-native-patches-'));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  for (const [index, source] of [main, ...renderer, preview].entries()) {
+    const file = path.join(temp, index === 0 ? 'main.cjs' : `renderer-${index}.mjs`);
+    fs.writeFileSync(file, source);
+    const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
 
 test('stock export splits numbered tools and preserves origin using the installed native worker', { skip: !fs.existsSync(archive) }, async () => {
   const entry = list(archive).find(e => /^out\/renderer\/assets\/stock-removal\.worker-.*\.js$/.test(e.path));

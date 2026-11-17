@@ -5,6 +5,11 @@ export const STOCK_EXPORT_MARKER = "/* NEST-USERMOD-STOCK-EXPORT-v1 */";
 export const CUTTER_MARKER = "/* NEST-USERMOD-CUTTER-v2 */";
 export const PREVIEW_MARKER = "/* NEST-USERMOD-PREVIEW-ROWS-v1 */";
 
+/** 2.0.1 removed the Device page's duplicate travel scan; the other four sites remain. */
+export function expectedBedSizeMarkers(version: string): number {
+  return version === "2.0.1" ? 4 : 5;
+}
+
 export function patchPreview(source: string): string {
   if (source.includes(PREVIEW_MARKER)) return source;
   const anchor = '"data-operation-id": isOperation ? node.operationId ?? node.name : void 0,';

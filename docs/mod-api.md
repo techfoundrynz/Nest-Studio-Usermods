@@ -277,6 +277,9 @@ With the installer's `--bed-size` option those constants read `globalThis.__user
 instead, which the loader's preload fills in synchronously (`ipcMain.on("usermod:bed-sync")`, so the values are
 there before the app's chunks evaluate) from the `bed-size` mod's settings. Travel limits are re-read on every
 check; the work-platform size is read once, so it needs a UI reload.
+Nest Studio 2.0.1 removed the Device page's separate travel-limit scan; the shared limits and platform
+overrides remain. The installer verifies four patch sites for 2.0.1 and five for 2.0.0, including readback
+from the packed archive. A missing site still fails the build.
 
 3D scene access: the installer exposes the app's three.js `SceneManager` instances as
 `globalThis.__usermodSceneManagers` (typed minimally as `UsermodSceneManagerLike`); `mods/view` shows

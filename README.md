@@ -12,7 +12,8 @@ workspace. It adds:
 - **Update-proof install**: an interactive installer rebuilds `app.asar` and can be re-run after every
   app update.
 
-Targets Nest Studio 2.0.0 (Electron 44.4.5) on Windows 11 and macOS (Apple Silicon). Modifying
+Targets Nest Studio 2.0.0 and 2.0.1 (Electron 44.4.5). The 2.0.1 archive and native-worker checks were run
+on Windows; macOS installation support remains available. Modifying
 the app may be against the vendor's terms of use; the `send` stage changes what reaches a real machine.
 Use with care. Licensed under the GPL-3.0 (see `LICENSE`).
 
@@ -91,6 +92,15 @@ colouring, hover highlighting, narrow-FOV projection and additional camera direc
 Tool-library reads and selective/Fusion imports use the native CAM controller; new tools stay unloaded,
 and replacements preserve their magazine pockets. Toolpath modifiers handle file-backed STL/relief/STEP
 results and inline custom operations without reissuing failed CAM requests.
+
+**Nest Studio 2.0.1.** The main process and preload are unchanged from 2.0.0; the 3D engine and Preview
+code are unchanged after accounting for asset references. Workshop examples gained front/back G-code tabs,
+localized filenames and a revised detail panel; opening an example selects the Device G-code tab.
+The vendor removed the Device page's duplicate travel-limit scan before Run/Resume. The installer therefore
+requires four bed-size patch sites on 2.0.1 and still requires five on 2.0.0; staging and packed-archive
+verification both enforce the exact count. The shared validation code is unchanged.
+No additional bundled mods became obsolete in this update. Rerun `pnpm run install:app -- --install`
+after closing the updated app to restore the loader removed by the vendor update.
 
 Build options are baked into the patched archive. The interactive install asks for them; `--no-devtools` /
 `--no-cam-docs` / `--no-multi-side` turn them off again. The MODS panel shows which ones the installed build

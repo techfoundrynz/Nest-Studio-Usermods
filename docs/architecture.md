@@ -1,6 +1,6 @@
 # Nest Studio architecture notes
 
-Findings from Nest Studio 1.1.0, updated for the 2.0.0 loader migration for Windows (Nestworks / Elephant Robotics desktop
+Findings from Nest Studio 1.1.0, updated through the 2.0.1 compatibility audit for Windows (Nestworks / Elephant Robotics desktop
 CNC software). These notes explain why the user-mod system is shaped the way it is.
 
 ## Processes
@@ -99,3 +99,10 @@ not move or replace the active GPU preview. Output is approximate and excludes r
 
 All mandatory bridge sites and requested optional sites must verify before packing. Installer/preload source
 fingerprints invalidate stale staging directories and install stamps after patch changes.
+
+In 2.0.1 the main/preload files are byte-identical to 2.0.0, and the 3D engine, Prepare and Preview chunks
+match after normalizing hashed asset references. The Device page no longer defines its lowercase travel
+limits or performs its separate Run/Resume travel scan. Bed-size verification is version-specific: five
+sites for 2.0.0, four for 2.0.1. The remaining shared travel/tool-coordinate limits and platform patches
+are still required. Native tool-library APIs, CAM result formats, IPC hook signatures and simulation
+workers are unchanged; no further mods are superseded.

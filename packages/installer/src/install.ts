@@ -27,7 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import prompts from "prompts";
 import { MODEL_IMPORT_MARKER, patchModelImport } from "./model-import";
-import { EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, patchStreamExport, patchTools, patchStockExport, patchMultiSide, MULTISIDE_SITES, patchCutter, CUTTER_MARKER, PREVIEW_MARKER, patchPreview } from "./compatibility";
+import { EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, patchStreamExport, patchTools, patchStockExport, patchMultiSide, MULTISIDE_SITES, patchCutter, CUTTER_MARKER, PREVIEW_MARKER, patchPreview, expectedBedSizeMarkers } from "./compatibility";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
 const IS_MAC = process.platform === "darwin";
@@ -61,7 +61,7 @@ interface BuildOption {
   target?: "renderer";
   assets?: RegExp;
   /** Renderer options patch several sites; all of them must carry the marker for the option to count as applied. */
-  expectedMarkers?: number;
+  expectedMarkers?: number | ((appVersion: string) => number);
 }
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 /* Bed size override: the app's hard-coded travel limits and work-platform size become lookups of a global
@@ -115,7 +115,7 @@ const BUILD_OPTIONS: BuildOption[] = [
     /*
      * The renderer hard-codes the machine envelope (X -238, Y -200, Z -123) in two chunks: FullApp checks a
      * program's bounds against it and limits continuous jog, DevicePage checks travel with the workpiece
-     * offset applied, and engine-3d draws a fixed 225 mm work platform. This turns those constants into
+     * offset applied (2.0.0 only), and engine-3d draws a fixed 225 mm work platform. This turns those constants into
      * lookups of globalThis.__usermodBed, which the loader's preload sets from the bed-size mod's settings
      * before any app code runs; without the mod the app's own numbers are used.
      */
@@ -126,7 +126,7 @@ const BUILD_OPTIONS: BuildOption[] = [
     marker: BED_MARKER,
     target: "renderer",
     assets: /^(FullApp|DevicePage|engine-3d)-.*\.js$/,
-    expectedMarkers: 5,
+    expectedMarkers: expectedBedSizeMarkers,
     apply: (s) => s.split(LIT_UPPER).join(PATCHED_UPPER).split(LIT_LOWER).join(PATCHED_LOWER).replace(LIT_PLATFORM, PATCHED_PLATFORM)
       .replace(LIT_XY, PATCHED_XY).replace(LIT_TOOL_COORD, PATCHED_TOOL_COORD),
     revert: (s) => s.split(PATCHED_UPPER).join(LIT_UPPER).split(PATCHED_LOWER).join(LIT_LOWER).replace(PATCHED_PLATFORM, LIT_PLATFORM)
@@ -134,6 +134,8 @@ const BUILD_OPTIONS: BuildOption[] = [
   }
 ];
 const countMarkers = (source: string, marker: string): number => source.split(marker).length - 1;
+const expectedMarkersFor = (option: BuildOption, version: string): number =>
+  typeof option.expectedMarkers === "function" ? option.expectedMarkers(version) : option.expectedMarkers ?? 1;
 type Flags = Record<string, boolean>;
 
 interface Options {
@@ -386,7 +388,7 @@ function patchBuildOptions(file: string, flags: Flags): void {
   assertParses(file);
 }
 /** Renderer-side build options: the same idempotent transforms, run over every matching asset chunk. */
-function patchRendererOptions(assetsDir: string, flags: Flags): void {
+function patchRendererOptions(assetsDir: string, flags: Flags, version: string): void {
   const names = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir) : [];
   for (const o of BUILD_OPTIONS) {
     if (o.target !== "renderer" || !o.assets) continue;
@@ -402,7 +404,7 @@ function patchRendererOptions(assetsDir: string, flags: Flags): void {
       }
       markers += countMarkers(next, o.marker);
     }
-    const expected = o.expectedMarkers ?? 1;
+    const expected = expectedMarkersFor(o, version);
     if (on && markers !== expected) fail(`${o.label}: only ${markers} of ${expected} anchors found in the renderer chunks (app version changed?); option incomplete`);
     if (!on && markers > 0) warn(`${o.label}: ${markers} marker(s) could not be reverted`);
     step(`${o.label}: ${on && markers >= expected ? "ON" : on ? "PARTIAL" : "off"}`);
@@ -532,6 +534,7 @@ function patchModelImporter(assetsDir: string): void {
 /** Read the patches back out of the finished archive so a stale or skipped patch can never be installed. */
 function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archive: string, flags: Flags): void {
   const read = (rel: string): string => asarLib.readEntry(archive, rel).toString("utf8");
+  const version = (JSON.parse(read("package.json")) as { version: string }).version;
   const main = read("out/main/index.js");
   const problems: string[] = [];
   if (!main.includes(EXPORT_MARKER)) problems.push("streamed export commit hook missing");
@@ -543,7 +546,8 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
     if (o.target === "renderer" && o.assets) {
       const chunks = asarLib.list(archive).filter((e) => o.assets!.test(path.posix.basename(e.path)) && e.path.startsWith("out/renderer/assets/"));
       const markers = chunks.reduce((sum, e) => sum + countMarkers(read(e.path), o.marker), 0);
-      if (markers < (o.expectedMarkers ?? 1)) problems.push(`${o.label} requested but only ${markers} of ${o.expectedMarkers ?? 1} patch sites present`);
+      const expected = expectedMarkersFor(o, version);
+      if (markers !== expected) problems.push(`${o.label} requested but ${markers} of ${expected} patch sites present`);
     } else if (!main.includes(o.marker)) problems.push(`${o.label} requested but not present`);
   }
   const preload = read("out/preload/index.js");
@@ -621,7 +625,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   patchPreload(path.join(STAGING_DIR, "out", "preload", "index.js"));
   patchCsp(path.join(STAGING_DIR, "out", "renderer", "index.html"));
   patchScene(path.join(STAGING_DIR, "out", "renderer", "assets"));
-  patchRendererOptions(path.join(STAGING_DIR, "out", "renderer", "assets"), flags);
+  patchRendererOptions(path.join(STAGING_DIR, "out", "renderer", "assets"), flags, version);
   patchModelImporter(path.join(STAGING_DIR, "out", "renderer", "assets"));
 
   step("repacking archive");
