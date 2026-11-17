@@ -10,7 +10,8 @@ const { list, readEntry } = require('../../asar/dist/index.js');
 const { patchStockExport, patchStreamExport, patchTools, patchCutter, patchPreview, patchMultiSide, MULTISIDE_SITES,
   EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, CUTTER_MARKER, PREVIEW_MARKER, MULTISIDE_MARKER } = require('../src/compatibility.ts');
 const { patchModelImport, MODEL_IMPORT_MARKER } = require('../src/model-import.ts');
-const archive = process.env.NEST_TEST_ASAR || 'C:/Program Files/nest-studio/resources/app.asar';
+const original = 'C:/Program Files/nest-studio/resources/app.asar.orig';
+const archive = process.env.NEST_TEST_ASAR || (fs.existsSync(original) ? original : 'C:/Program Files/nest-studio/resources/app.asar');
 
 test('installed vendor archive accepts all required bridges and multi-side patches without syntax errors', { skip: !fs.existsSync(archive) }, t => {
   const entries = list(archive);

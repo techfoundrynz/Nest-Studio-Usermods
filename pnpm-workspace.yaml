@@ -13,6 +13,8 @@ allowBuilds:
 # version; bump here, then `pnpm install`. strict mode makes `pnpm add` refuse versions that bypass the catalog.
 catalogMode: strict
 catalog:
+  "@modelcontextprotocol/sdk": "1.32.2"
+  "zod": "4.6.7"
   "fflate": "0.8.3"
   "gerber-parser": "4.2.7"
   "gerber-plotter": "4.2.8"

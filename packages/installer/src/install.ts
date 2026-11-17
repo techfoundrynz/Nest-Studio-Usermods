@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import prompts from "prompts";
 import { MODEL_IMPORT_MARKER, patchModelImport } from "./model-import";
+import { MCP_PROJECT_MARKER, MCP_ARCHIVE_MARKER, patchMcpProject, patchMcpArchive } from "./mcp-bridge";
 import { EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, patchStreamExport, patchTools, patchStockExport, patchMultiSide, MULTISIDE_SITES, patchCutter, CUTTER_MARKER, PREVIEW_MARKER, patchPreview, expectedBedSizeMarkers } from "./compatibility";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -520,7 +521,7 @@ function patchModelImporter(assetsDir: string): void {
   const candidates = fs.readdirSync(assetsDir).filter(name => /^FullApp-.*\.js$/.test(name));
   if (candidates.length !== 1) fail("Expected one FullApp renderer chunk for model import.");
   const file = path.join(assetsDir, candidates[0]!);
-  fs.writeFileSync(file, patchTools(patchModelImport(fs.readFileSync(file, "utf8"))), "utf8");
+  fs.writeFileSync(file, patchMcpArchive(patchTools(patchModelImport(fs.readFileSync(file, "utf8")))), "utf8");
   assertParses(file);
   step("patched sequential model-import bridge");
   const previewChunks = fs.readdirSync(assetsDir).filter(name => /^PreviewPage-.*\.js$/.test(name));
@@ -529,6 +530,12 @@ function patchModelImporter(assetsDir: string): void {
   fs.writeFileSync(previewFile, patchPreview(fs.readFileSync(previewFile, "utf8")), "utf8");
   assertParses(previewFile);
   step("patched Preview operation-row metadata");
+  const prepareChunks = fs.readdirSync(assetsDir).filter(name => /^PreparePageContent-.*\.js$/.test(name));
+  if (prepareChunks.length !== 1) fail("Expected one PreparePageContent renderer chunk for MCP.");
+  const prepareFile = path.join(assetsDir, prepareChunks[0]!);
+  fs.writeFileSync(prepareFile, patchMcpProject(fs.readFileSync(prepareFile, "utf8")), "utf8");
+  assertParses(prepareFile);
+  step("patched native MCP project gateway");
 }
 
 /** Read the patches back out of the finished archive so a stale or skipped patch can never be installed. */
@@ -553,6 +560,9 @@ function verifyPacked(asarLib: typeof import("@neststudio-usermods/asar"), archi
   const preload = read("out/preload/index.js");
   const fullApp = asarLib.list(archive).find(e => /^out\/renderer\/assets\/FullApp-.*\.js$/.test(e.path));
   if (!fullApp || !read(fullApp.path).includes(TOOLS_MARKER)) problems.push("native tool-library bridge missing");
+  if (!fullApp || !read(fullApp.path).includes(MCP_ARCHIVE_MARKER)) problems.push("native MCP project archive bridge missing");
+  const prepare = asarLib.list(archive).find(e => /^out\/renderer\/assets\/PreparePageContent-.*\.js$/.test(e.path));
+  if (!prepare || !read(prepare.path).includes(MCP_PROJECT_MARKER)) problems.push("native MCP project gateway missing");
   const preview = asarLib.list(archive).find(e => /^out\/renderer\/assets\/PreviewPage-.*\.js$/.test(e.path));
   if (!preview || !read(preview.path).includes(PREVIEW_MARKER)) problems.push("Preview operation-row metadata missing");
   if (!fullApp || !read(fullApp.path).includes(MODEL_IMPORT_MARKER)) problems.push("sequential model-import bridge missing");
@@ -582,7 +592,7 @@ async function install(options: Options, buildOnly: boolean): Promise<void> {
   // Content-based detection: a patched archive is never treated as the original.
   const stamp = readJson<Stamp | null>(STAMP_FILE, null);
   const patchRevision = createHash("sha256").update([
-    __filename, path.join(__dirname, "compatibility.ts"), path.join(__dirname, "model-import.ts"), LOADER_PRELOAD
+    __filename, path.join(__dirname, "compatibility.ts"), path.join(__dirname, "model-import.ts"), path.join(__dirname, "mcp-bridge.ts"), path.join(__dirname, "mcp-machining.ts"), LOADER_PRELOAD
   ].map(file => fs.readFileSync(file, "utf8")).join("\n")).digest("hex");
   const currentSha = sha256(asar);
   const installedMain = asarLib.readEntry(asar, "out/main/index.js").toString("utf8");

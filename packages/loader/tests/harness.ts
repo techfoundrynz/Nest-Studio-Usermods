@@ -124,7 +124,7 @@ void (async () => {
   );
   const enabledSet = initial.available.filter((m) => !m.core).map((m) => m.name);
   const enabledInfo = data(await invoke<Usermod.Info>("usermod:set-enabled", enabledSet));
-  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 8 && enabledInfo.mainMods.length === 11, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
+  check("set-enabled activates post-processors and main mods immediately", enabledInfo.postprocessors.length === 8 && enabledInfo.mainMods.length === 12, `${enabledInfo.postprocessors.length} pps, ${enabledInfo.mainMods.length} main`);
   check("set-enabled rejects unknown names", !(await invoke("usermod:set-enabled", ["../x"])).ok);
 
   let written: { filePath: string; data: string } | null = null;
@@ -211,8 +211,8 @@ void (async () => {
   check("available lists every package with enabled state", info.available.length >= 13 && info.available.find((m) => m.name === "mods-menu")?.core === true && info.available.find((m) => m.name === "peck-drill")?.enabled === true);
   const reloadOf = (name: string): string | undefined => info.available.find((m) => m.name === name)?.reload;
   check("reload level derived from kinds", reloadOf("program-header") === "none" && reloadOf("view") === "ui" && reloadOf("jobs") === "app" && reloadOf("app-tools") === "app" && info.available.every((m) => m.reloadDeclared === false));
-  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "stock-export", "jobs", "lan-monitor", "machine-state", "pcb-import", "project-backup", "timelapse", "toolpath-modifiers"].sort()), info.mainMods.map((m) => m.name).join(","));
-  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "feeds-speeds", "stock-export", "gcode-lab", "jobs", "jog", "lan-monitor", "mods-menu", "overrides", "pcb-import", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"].sort()), info.uiMods.map((m) => m.name).join(","));
+  check("main mods active", JSON.stringify(info.mainMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "export", "stock-export", "jobs", "lan-monitor", "machine-state", "mcp-server", "pcb-import", "project-backup", "timelapse", "toolpath-modifiers"].sort()), info.mainMods.map((m) => m.name).join(","));
+  check("ui mods listed", JSON.stringify(info.uiMods.map((m) => m.name).sort()) === JSON.stringify(["app-tools", "appearance", "bed-size", "cutter", "cycles", "device-macros", "export", "feeds-speeds", "stock-export", "gcode-lab", "jobs", "jog", "lan-monitor", "mcp-server", "mods-menu", "overrides", "pcb-import", "tool-change", "toolpath-modifiers", "tools", "view", "work-zero"].sort()), info.uiMods.map((m) => m.name).join(","));
 
   // Interceptors: export-filename rewrites the save dialog's defaultPath; project-backup copies saved zips.
   let dialogArgs: unknown[] = [];

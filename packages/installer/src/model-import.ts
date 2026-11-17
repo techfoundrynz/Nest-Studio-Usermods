@@ -1,9 +1,9 @@
 /** Promise-based bridge to the same importer used by Nest Studio's File menu. */
-export const MODEL_IMPORT_MARKER = "/* NEST-USERMOD-MODEL-IMPORT-v1 */";
+export const MODEL_IMPORT_MARKER = "/* NEST-USERMOD-MODEL-IMPORT-v2 */";
 export const MODEL_IMPORT_BLOCK = `
   ${MODEL_IMPORT_MARKER}
   const usermodBatchBusy = reactExports.useRef(false);
-  const usermodImportModels = reactExports.useCallback(async (files, progress) => {
+  const usermodImportModels = reactExports.useCallback(async (files, progress, options = {}) => {
     if (usermodBatchBusy.current) throw new Error("A model batch is already importing.");
     if (activeProjectGenerating) throw new Error("Wait for toolpath generation to finish before importing boards.");
     if (!Array.isArray(files) || !files.length) throw new Error("No board files to import.");
@@ -11,8 +11,11 @@ export const MODEL_IMPORT_BLOCK = `
     let imported = 0;
     let projectId = null;
     try {
-      projectId = isOnProject && activeTab?.projectType === "3D" && activeTab.projectAxis === "3Axis"
-        ? activeProjectId : addProject("3Axis");
+      const axis = options.axis ?? "3Axis";
+      if (axis !== "3Axis" && axis !== "4Axis") throw new Error("Unsupported machining axis.");
+      if (axis === "4Axis" && files.length !== 1) throw new Error("Native 4-axis projects accept one model.");
+      projectId = !options.newProject && isOnProject && activeTab?.projectType === "3D" && activeTab.projectAxis === axis
+        ? activeProjectId : addProject(axis);
       if (!projectId) return { imported, total: files.length, projectId, error: "Could not create a project." };
       for (const file of files) {
         progress?.(imported, files.length, file.name);
@@ -33,6 +36,7 @@ export const MODEL_IMPORT_BLOCK = `
 
 export function patchModelImport(source: string): string {
   if (source.includes(MODEL_IMPORT_MARKER)) return source;
+  if (source.includes("/* NEST-USERMOD-MODEL-IMPORT-")) throw new Error("Stale model importer; rebuild from the original archive");
   const suffix = "  const onNewProject = reactExports.useCallback(() => {";
   const anchors = ["  }, [loadModelFile, location.pathname]);\n", "  }, [loadModelFile]);\n"];
   const matches = anchors.filter(a => source.split(a + suffix).length === 2);

@@ -19,7 +19,7 @@ declare var __usermodStockExport: ((runtime: UsermodSimRuntimeLike, signal: Abor
 
 /** Installed renderer bridge; resolves only after every successful model is committed. */
 declare var __usermodModelImport: {
-  importFiles(files: File[], progress?: (imported: number, total: number, name: string) => void): Promise<{
+  importFiles(files: File[], progress?: (imported: number, total: number, name: string) => void, options?: { axis?: "3Axis" | "4Axis"; newProject?: boolean }): Promise<{
     imported: number; total: number; projectId: string | null; error?: string;
   }>;
 } | undefined;

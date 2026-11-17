@@ -1,17 +1,31 @@
 # compiled output (tsc) - the installer builds it
 dist/
 
-# node_modules (TypeScript + type declarations only)
+# dependencies and local package-manager caches
 node_modules/
+.pnpm-store/
 
 # build output of tools/install.ps1 (extracted app + repacked archive, ~530 MB)
 build/
+*.tsbuildinfo
+.cache/
+coverage/
+
+# generated CAM projects, exports and setup notes
+/outputs/
 
 # runtime artifacts
 usermod.log
 usermod.log.*
+*.log
 data/*
 !data/.gitkeep
+
+# local environment configuration and secrets (keep example templates)
+.env
+.env.*
+!.env.example
+!.env.*.example
 
 # editor / OS noise
 .vscode/
