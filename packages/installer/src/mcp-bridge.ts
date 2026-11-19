@@ -1,9 +1,11 @@
 import { MCP_MACHINING_BLOCK } from "./mcp-machining";
+import { MCP_WORKFLOWS_BLOCK, MCP_PREPARE_WORKFLOWS_BLOCK, MCP_IO_BLOCK } from "./mcp-workflows";
 /** Native Prepare gateway. No store-file writes or copied CAM/machining implementation. */
-export const MCP_PROJECT_MARKER = "/* NEST-USERMOD-MCP-PROJECT-v6 */";
-export const MCP_ARCHIVE_MARKER = "/* NEST-USERMOD-MCP-ARCHIVE-v1 */";
+export const MCP_PROJECT_MARKER = "/* NEST-USERMOD-MCP-PROJECT-v7 */";
+export const MCP_ARCHIVE_MARKER = "/* NEST-USERMOD-MCP-ARCHIVE-v2 */";
 export const MCP_ARCHIVE_BLOCK = `
 ${MCP_ARCHIVE_MARKER}
+${MCP_WORKFLOWS_BLOCK}
 globalThis.__usermodProjectZip = async (project, modelFiles) => {
   const chunks = [];
   let length = 0;
@@ -30,6 +32,7 @@ export const MCP_PROJECT_BLOCK = `
         if (!snapshot) throw new Error("Project is no longer open.");
         if (action === "get_project") return JSON.parse(JSON.stringify(snapshot.document));
 ${MCP_MACHINING_BLOCK}
+${MCP_PREPARE_WORKFLOWS_BLOCK}
         if (action === "save_project_copy") {
           if (processTreeLoading || processTreeGenerating || fourAxisGenerating) throw new Error("Wait for generation to finish before saving.");
           if (!globalThis.__usermodProjectZip) throw new Error("Native project archive bridge unavailable.");
@@ -118,7 +121,10 @@ export function patchMcpProject(source: string): string {
 
 export function patchMcpArchive(source: string): string {
   if (source.includes(MCP_ARCHIVE_MARKER)) return source;
+  if (source.includes("/* NEST-USERMOD-MCP-ARCHIVE-")) throw new Error("Stale native CAM file gateway; rebuild from the original archive");
   const anchor = "function createProjectZipEntries(input) {";
   if (source.split(anchor).length !== 2) throw new Error("Native project archive anchor missing or ambiguous");
-  return source.replace(anchor, () => MCP_ARCHIVE_BLOCK + "\n" + anchor);
+  const ioAnchor = "  return {\n    tabItems,\n    activeProjectId,\n    canSaveActive,\n    openProjectDialog,";
+  if (source.split(ioAnchor).length !== 2) throw new Error("Native MCP project IO anchor missing or ambiguous");
+  return source.replace(anchor, () => MCP_ARCHIVE_BLOCK + "\n" + anchor).replace(ioAnchor, () => MCP_IO_BLOCK + ioAnchor);
 }

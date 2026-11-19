@@ -66,6 +66,22 @@ test('smart-plan configuration selects mounted tools without changing geometry o
   await assert.rejects(run('configure_stock', { shape: 'round' }), /square stock/);
 });
 
+test('support edits respect native fixture depths, reset custom layout and do not partially save invalid drafts', async () => {
+  const { run, ctx, calls, draft } = machining();
+  draft.supportSetting = { tabNum: 4, tabLength: 6, tabHigh: 1, reserveTabDepth: .4, cutTabDepth: 1, tabPaths: [{}], isCustomLayout: true, frontMachiningDepth: 20, backMachiningDepth: 20 };
+  ctx.fixtureConfiguration = { type: 'low-profile-vise' };
+  ctx.supportSceneBridge = { getModelMeshById: () => ({}) };
+  ctx.getMaxMachiningDepth = () => 47;
+  ctx.computeWorkpieceCutDepth = () => ({ maxTabHigh: 3 });
+  await assert.rejects(run('configure_toolpath_plan', { supportSetting: { frontMachiningDepth: 48 } }), /depth exceeds/);
+  assert.equal(calls.length, 0);
+  await assert.rejects(run('configure_toolpath_plan', { setupId: 's', supportSetting: { tabNum: 6 } }), /all faces/);
+  await run('configure_toolpath_plan', { modelId: 'm', supportSetting: { tabNum: 6, tabHigh: 2 } });
+  const saved = calls.at(-1)[2].supportSetting;
+  assert.equal(saved.tabNum, 6); assert.equal(saved.isCustomLayout, false); assert.equal(saved.tabPaths.length, 0);
+  assert.equal(draft.supportSetting.tabNum, 4);
+});
+
 test('rotary generation uses the native 4-axis controller and retains mode, clearance and travel gates', async () => {
   const { run, ctx, calls } = machining(); ctx.project.projectAxis = '4Axis'; ctx.processTree.projectAxis = '4Axis';
   const tree = ctx.processTree;

@@ -23,7 +23,7 @@ test('official client initializes, discovers tools and reads status over authent
   const url = await start(t, async (name, args) => { calls.push([name, args]); return { connected: false }; });
   const c = await client(t, url);
   const { tools } = await c.listTools();
-  assert.equal(tools.length, 33);
+  assert.equal(tools.length, 53);
   assert.equal(tools.find(x => x.name === 'get_status').annotations.readOnlyHint, true);
   assert.equal(tools.find(x => x.name === 'send_machine_command').annotations.destructiveHint, true);
   const result = await c.callTool({ name: 'get_status', arguments: {} });
@@ -37,7 +37,12 @@ test('invalid commands, stock, pairing codes and tool inputs never reach dispatc
     ['send_machine_command', { command: 'G0 X1\nM3' }],
     ['set_stock_dimensions', { projectId: 'p', width: -1, length: 10, thickness: 2 }],
     ['connect_machine', { ipAddress: 'https://example.com', codeValue: '123456' }],
-    ['save_tool', { tool: { id: 'x', name: 'x', type: 'endmill', diameter: 0 } }]
+    ['save_tool', { tool: { id: 'x', name: 'x', type: 'endmill', diameter: 0 } }],
+    ['validate_programs', { projectId: 'p', programId: 'program' }],
+    ['manage_tool_slots', { action: 'assign', toolId: 't', expectedVersions: {} }],
+    ['manage_tool_slots', { action: 'reorder', toolIds: ['t','t',null,null,null], expectedVersions: {} }],
+    ['simplify_model', { projectId: 'p', modelId: 'm', stage: 'preview' }],
+    ['preview_toolpaths', { projectId: 'p', setupId: 's', operationId: 'op' }]
   ]) {
     const r = await c.callTool({ name, arguments: args }); assert.equal(r.isError, true);
   }

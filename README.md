@@ -172,7 +172,7 @@ discovers every `mods/*/package.json` with a manifest at startup and loads those
 | `device-macros` | ui | User-defined G-code / command macro buttons with an in-app editor and confirmations |
 | `tool-change` | post + ui | Safe retract with spindle and coolant off before every tool change, plus a dialog naming the new tool with Resume when the machine holds |
 | `lan-monitor` | main + ui | Read-only status page on the local network with progress, ETA and the latest camera frame |
-| `mcp-server` | main + ui | Authenticated MCP on this PC: 3/4-axis import, smart milling/carving, custom operations, rotary base/cutoff, project copies and machine workflows; [setup and tools](docs/mcp-server.md) |
+| `mcp-server` | main + ui | 53 authenticated local MCP tools: 3/4-axis CAM, custom operations, native inspection/validation, direct NC export, project lifecycle, tool slots and model editing; [setup and tools](docs/mcp-server.md) |
 | `machine-state` | main | Shared machine status, positions, WCS, feed / spindle, progress and ETA (`machine:state`) for the other mods |
 | `timelapse` | main | Saves camera frames to `data/timelapse/<job>` every N seconds while a job runs |
 | `tools` | ui | Tool library export / import as JSON or a Fusion 360 library (`.json` and zipped `.tools`), resolving id clashes through the native tool controller |

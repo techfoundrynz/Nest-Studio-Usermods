@@ -1,11 +1,32 @@
 (function mcpServerUi(): void {
   const rt = window.usermodRuntime;
   const ui = window.usermodUI;
-  rt.register({ name: "mcp-server", version: "0.2.0" });
+  rt.register({ name: "mcp-server", version: "0.3.0" });
   const unwrap = <T,>(r: NestStudio.Result<T>): T => { if (!r.ok) throw Error(r.message ?? r.code ?? "Native request failed"); return r.data; };
   type NativeProjectBridge = { run(action: string, args: Record<string, unknown>): unknown };
   (globalThis as unknown as { __usermodMcpDispatch: unknown }).__usermodMcpDispatch = async (action: string, args: Record<string, unknown>): Promise<unknown> => {
     switch (action) {
+      case "open_project": case "save_project": case "activate_project": case "close_project": {
+        const globals = globalThis as unknown as { __usermodMcpIo?: NativeProjectBridge; __usermodMcpTabs?: NativeProjectBridge; __usermodMcpProject?: NativeProjectBridge };
+        if (action === "save_project" || action === "close_project") {
+          if (!globals.__usermodMcpProject) throw Error("Open the requested project's Prepare page before saving or closing through MCP");
+          const state = await globals.__usermodMcpProject.run("get_cam_state", { projectId: args.projectId }) as { loading: boolean; generating: boolean };
+          if (state.loading || state.generating) throw Error("Wait for native generation to finish");
+        }
+        const bridge = action === "open_project" || action === "save_project" ? globals.__usermodMcpIo : globals.__usermodMcpTabs;
+        if (!bridge) throw Error("Native project lifecycle bridge unavailable; install the updated loader and open Prepare");
+        return bridge.run(action, args);
+      }
+      case "manage_tool_slots": {
+        const tools = (globalThis as unknown as { __usermodTools?: { manage(action: unknown, args: Record<string, unknown>): Promise<unknown> } }).__usermodTools;
+        if (!tools?.manage) throw Error("Native tool-slot controller unavailable; install the updated loader");
+        if (args.action === "reorder") {
+          const ids = args.toolIds as (string | null)[] | undefined;
+          if (!ids || ids.length !== 5 || new Set(ids.filter(id => id !== null)).size !== ids.filter(id => id !== null).length) throw Error("Supply five unique tool IDs/null slots");
+        } else if (!args.toolId || (args.action === "assign" && !Number.isInteger(args.slotNum))) throw Error("toolId and an assign slotNum are required");
+        await tools.manage(args.action, args);
+        return { status: "updated", tools: await rt.tools.list(), physicalToolChange: false };
+      }
       case "get_machining_capabilities": return {
         axes: ["3Axis", "4Axis"], modelFormats: ["step", "stp", "stl"],
         threeAxis: { smartMilling: true, carving: true, flippedSetups: true, customOperations: ["contour", "pocket", "drilling", "chamfer", "thread"] },

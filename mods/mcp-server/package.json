@@ -1,6 +1,6 @@
 {
   "name": "@neststudio-mods/mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "GPL-3.0-only",
   "description": "Local MCP access to projects, tools, toolpaths, jobs and machine controls",

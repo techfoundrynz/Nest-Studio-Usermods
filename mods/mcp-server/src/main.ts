@@ -19,7 +19,7 @@ const mod: Usermod.MainMod<{ port: number }> = {
     let listening = false;
     let lastError: string | null = null;
     let mutationBusy = false;
-    const readOnly = new Set(["get_status", "get_machining_capabilities", "list_projects", "get_project", "get_cam_state", "get_operation_editor", "get_operation_geometry", "list_tools", "list_jobs", "validate_gcode", "estimate_gcode_time"]);
+    const readOnly = new Set(["get_status", "get_machining_capabilities", "list_projects", "get_project", "get_cam_state", "get_operation_editor", "get_operation_geometry", "list_tools", "list_jobs", "validate_gcode", "estimate_gcode_time", "list_programs", "get_model_analysis", "get_model_edit_state"]);
     const renderer = async (action: string, args: Record<string, unknown>): Promise<unknown> => {
       const win = api.getMainWindow();
       if (!win || win.isDestroyed() || win.webContents.isLoading()) throw new Error("Nest Studio UI is not ready");
@@ -32,6 +32,37 @@ const mod: Usermod.MainMod<{ port: number }> = {
       if (mutating && mutationBusy) throw new Error("Another MCP action is pending. Finish it in Nest Studio before retrying.");
       if (mutating) mutationBusy = true;
       try {
+        if (action === "open_project") {
+          const target = String(args.filePath);
+          if (!path.isAbsolute(target) || path.extname(target).toLowerCase() !== ".zip") throw new Error("Provide an absolute native project .zip path");
+          const handle = await fs.promises.open(target, "r");
+          try {
+            const stat = await handle.stat();
+            if (!stat.isFile() || stat.size < 4 || stat.size > 64 * 1024 * 1024) throw new Error("Project archive must be a regular file up to 64 MiB");
+            const bytes = await handle.readFile();
+            if (bytes.length !== stat.size || bytes.readUInt32LE(0) !== 0x04034b50) throw new Error("Invalid or changing project archive");
+            return await renderer(action, { name: path.basename(target), base64: bytes.toString("base64") });
+          } finally { await handle.close(); }
+        }
+        if (action === "export_nc_file") {
+          const target = String(args.filePath);
+          const extension = path.extname(target).toLowerCase();
+          if (!path.isAbsolute(target) || ![".nc", ".gcode", ".tap", ".zip"].includes(extension)) throw new Error("Provide an absolute .nc/.gcode/.tap or .zip output path");
+          if (fs.existsSync(target)) throw new Error("Output already exists; choose a new path");
+          const result = await renderer(action, args) as { base64: string; extension: string };
+          if ((result.extension === ".zip") !== (extension === ".zip")) throw new Error("Use .zip for multiple setups, or .nc/.gcode/.tap for one setup/program");
+          if (typeof result.base64 !== "string" || result.base64.length > 90 * 1024 * 1024) throw new Error("Invalid or oversized native export");
+          const bytes = Buffer.from(result.base64, "base64");
+          if (!bytes.length || bytes.length > 64 * 1024 * 1024) throw new Error("Native export must be nonempty and at most 64 MiB");
+          const temporary = path.join(path.dirname(target), `.nest-mcp-${randomBytes(12).toString("hex")}.tmp`);
+          try {
+            await fs.promises.writeFile(temporary, bytes, { flag: "wx" });
+            const { transformExportFile } = require(path.join(api.modDir, "packages", "loader", "dist", "export-file.js")) as { transformExportFile(temp: string, target: string, process: (code: string, context: Usermod.RunContextInput & { internal: boolean }) => Promise<string>): Promise<void> };
+            await transformExportFile(temporary, target, (code, context) => api.runPostprocessors("export", code, context));
+            await fs.promises.copyFile(temporary, target, fs.constants.COPYFILE_EXCL);
+            return { status: "exported", filePath: target, bytes: (await fs.promises.stat(target)).size, postprocessorsApplied: true };
+          } finally { await fs.promises.unlink(temporary).catch(() => undefined); }
+        }
         if (action === "save_project_copy") {
           const target = String(args.filePath);
           if (!path.isAbsolute(target) || path.extname(target).toLowerCase() !== ".zip") throw new Error("Provide an absolute .zip output path");

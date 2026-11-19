@@ -10,6 +10,8 @@ const { list, readEntry } = require('../../asar/dist/index.js');
 const { patchStockExport, patchStreamExport, patchTools, patchCutter, patchPreview, patchMultiSide, MULTISIDE_SITES,
   EXPORT_MARKER, TOOLS_MARKER, STOCK_EXPORT_MARKER, CUTTER_MARKER, PREVIEW_MARKER, MULTISIDE_MARKER } = require('../src/compatibility.ts');
 const { patchModelImport, MODEL_IMPORT_MARKER } = require('../src/model-import.ts');
+const { patchMcpArchive, patchMcpProject } = require('../src/mcp-bridge.ts');
+const { patchMcpTabs } = require('../src/mcp-workflows.ts');
 const original = 'C:/Program Files/nest-studio/resources/app.asar.orig';
 const archive = process.env.NEST_TEST_ASAR || (fs.existsSync(original) ? original : 'C:/Program Files/nest-studio/resources/app.asar');
 
@@ -21,7 +23,7 @@ test('installed vendor archive accepts all required bridges and multi-side patch
     return readEntry(archive, matches[0].path).toString('utf8');
   };
   const main = patchStreamExport(read(/^out\/main\/index\.js$/), 'C:/test/loader.js');
-  const full = patchTools(patchModelImport(read(/^out\/renderer\/assets\/FullApp-.*\.js$/)));
+  const full = patchMcpArchive(patchTools(patchModelImport(read(/^out\/renderer\/assets\/FullApp-.*\.js$/))));
   const engine = patchCutter(patchStockExport(read(/^out\/renderer\/assets\/engine-3d-.*\.js$/)));
   const preview = patchPreview(read(/^out\/renderer\/assets\/PreviewPage-.*\.js$/));
   for (const [source, marker] of [[main, EXPORT_MARKER], [full, TOOLS_MARKER], [full, MODEL_IMPORT_MARKER], [engine, STOCK_EXPORT_MARKER], [engine, CUTTER_MARKER], [preview, PREVIEW_MARKER]]) {
@@ -32,13 +34,14 @@ test('installed vendor archive accepts all required bridges and multi-side patch
   assert.equal(patchCutter(engine), engine);
   assert.equal(patchStockExport(engine), engine);
   assert.equal(patchPreview(preview), preview);
-  const prepare = read(/^out\/renderer\/assets\/PreparePageContent-.*\.js$/);
+  const prepare = patchMcpProject(read(/^out\/renderer\/assets\/PreparePageContent-.*\.js$/));
+  const tabs = patchMcpTabs(read(/^out\/renderer\/assets\/ProjectPage-.*\.js$/));
   const renderer = [full, engine, prepare].map(source => patchMultiSide(source, true));
   assert.equal(renderer.reduce((sum, source) => sum + source.split(MULTISIDE_MARKER).length - 1, 0), MULTISIDE_SITES);
   for (const source of renderer) assert.equal(patchMultiSide(source, true), source);
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nest-native-patches-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
-  for (const [index, source] of [main, ...renderer, preview].entries()) {
+  for (const [index, source] of [main, ...renderer, preview, tabs].entries()) {
     const file = path.join(temp, index === 0 ? 'main.cjs' : `renderer-${index}.mjs`);
     fs.writeFileSync(file, source);
     const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });

@@ -36,11 +36,13 @@ export const MCP_MACHINING_BLOCK = `
           if (!processTree) throw new Error("Request generate_toolpaths and wait for a native plan first.");
           if (typeof args.carving === "boolean" && project.projectAxis !== "3Axis") throw new Error("The carving toggle belongs to native 3-axis smart milling; rotary projects use relief milling.");
           if (args.fourAxisMachiningMode && project.projectAxis !== "4Axis") throw new Error("Rotary base/cutoff settings require a 4-axis project.");
+          if (args.supportSetting && (project.projectAxis !== "3Axis" || args.setupId)) throw new Error("Support settings require 3-axis planning and must apply across all faces; omit setupId.");
           const drafts = { ...processTree.initialDrafts, ...millingDrafts };
-          let changed = 0;
+          const updates = [];
           for (const [key, current] of Object.entries(drafts)) {
             const setup = processTree.setups.find(s => getProcessTreeDraft(drafts, s.id, current.modelId) === current);
             if (args.setupId && setup?.id !== args.setupId) continue;
+            if (args.modelId && current.modelId !== args.modelId) continue;
             const mounted = getCutLibrary?.() ?? cutLibrary;
             const selectedIds = args.toolIds ?? current.oneKeySetting.allTools.map(t => t.id);
             const selected = selectedIds.map(id => {
@@ -57,11 +59,25 @@ export const MCP_MACHINING_BLOCK = `
             const next = { ...current, oneKeySetting: { ...current.oneKeySetting, allTools: selected,
               cutSetting: { ...current.oneKeySetting.cutSetting, ...typeof args.carving === "boolean" ? { isCarve: args.carving } : {} } },
               ...args.fourAxisMachiningMode ? { fourAxisMachiningMode: { ...args.fourAxisMachiningMode, dimensionAxes: "machining-zyx" } } : {} };
-            saveMillingDraft(key, next);
-            changed++;
+            if (args.supportSetting) {
+              const mesh = supportSceneBridge.getModelMeshById(current.modelId);
+              if (!mesh) throw new Error("Model scene is not ready for support validation.");
+              const support = { ...current.supportSetting, ...args.supportSetting };
+              const thickness = Number(snapshot.document.projectCanvasData.material.thickness);
+              const maxDepth = getMaxMachiningDepth(thickness, fixtureConfiguration.type);
+              const { maxTabHigh } = computeWorkpieceCutDepth(mesh, thickness);
+              if ([support.frontMachiningDepth, support.backMachiningDepth].some(v => v !== undefined && (!Number.isFinite(v) || v < 0 || v > maxDepth))) throw new Error("Machining depth exceeds native stock/fixture limits.");
+              if (support.tabHigh > maxTabHigh || support.reserveTabDepth > support.tabHigh || support.cutTabDepth > thickness) throw new Error("Retaining tab/reserve/cut depth exceeds native model/stock limits.");
+              if (["tabNum", "tabLength", "tabHigh"].some(k => Object.hasOwn(args.supportSetting, k))) {
+                support.tabPaths = []; support.tabAllPath = ""; support.isCustomLayout = false;
+              }
+              next.supportSetting = support;
+            }
+            updates.push([key, next]);
           }
-          if (!changed) throw new Error("No matching native plan draft.");
-          return { status: "configured", drafts: changed };
+          if (!updates.length) throw new Error("No matching native plan draft.");
+          for (const [key, next] of updates) saveMillingDraft(key, next);
+          return { status: "configured", drafts: updates.length };
         }
         if (action === "generate_planned_toolpaths" && project.projectAxis === "4Axis") {
           if (processTreeLoading || processTreeGenerating || fourAxisGenerating) throw new Error("Native generation is already running.");

@@ -91,7 +91,7 @@ test('project copy uses native archive entries and streams model/toolpath bytes'
   assert.equal(input.project, project); assert.equal(input.modelFiles, files);
   ctx.streamProjectZip = async (_, write) => write({ byteLength: 65 * 1024 * 1024 });
   await assert.rejects(ctx.__usermodProjectZip(project, files), /64 MiB/);
-  const source = 'function createProjectZipEntries(input) {}';
+  const source = 'function createProjectZipEntries(input) {}\nfunction io() {\n  return {\n    tabItems,\n    activeProjectId,\n    canSaveActive,\n    openProjectDialog,\n }; }';
   assert.equal(patchMcpArchive(patchMcpArchive(source)), patchMcpArchive(source));
   assert.throws(() => patchMcpArchive(''), /archive anchor/);
 });

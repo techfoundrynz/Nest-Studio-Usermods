@@ -21,7 +21,11 @@ function toolsBridge() {
   const controller = {
     store: { get: () => [tool] }, refresh: async () => calls.push('refresh'), findTool: () => tool,
     updateTool: async (id, input) => { calls.push({ id, input }); return input; },
-    createTool: async input => { calls.push({ create: input }); return { ...input, id: 'created' }; }
+    createTool: async input => { calls.push({ create: input }); return { ...input, id: 'created' }; },
+    installTool: async (id, slot) => { calls.push(['assign', id, slot]); return true; },
+    uninstallTool: async id => { calls.push(['unassign', id]); return true; },
+    deleteTool: async id => { calls.push(['delete', id]); return true; },
+    reorderSlots: async slots => { calls.push(['reorder', slots]); return true; }
   };
   const source = `function getToolLibraryController(store) {\n  let controller = provided;\n  return controller;\n}\n\nfunction useToolLibraryActions() {}`;
   const patched = patchTools(source);
@@ -42,6 +46,18 @@ test('tool bridge creates through native controller rather than rewriting the st
   const { bridge, calls } = toolsBridge();
   const created = await bridge.save({ id: 'foreign', name: 'imported', slotNum: null }, false);
   assert.equal(created.id, 'created'); assert.equal(calls.at(-1).create.slotNum, null);
+});
+
+test('tool slot management rejects stale inventories and mounted deletion, then uses native controller', async () => {
+  const { bridge, calls, tool } = toolsBridge();
+  await assert.rejects(bridge.manage('unassign', { toolId: 'one', expectedVersions: { one: 2 } }), /changed/);
+  assert.ok(calls.every(c => c === 'refresh'));
+  const expectedVersions = { one: 3 };
+  await assert.rejects(bridge.manage('delete', { toolId: 'one', expectedVersions }), /Unassign/);
+  await bridge.manage('unassign', { toolId: 'one', expectedVersions }); assert.equal(calls.at(-1)[0], 'unassign');
+  await bridge.manage('assign', { toolId: 'one', slotNum: 4, expectedVersions }); assert.deepEqual(calls.at(-1), ['assign', 'one', 4]);
+  tool.slotNum = null;
+  await bridge.manage('delete', { toolId: 'one', expectedVersions }); assert.equal(calls.at(-1)[0], 'delete');
 });
 test('stock export creates an isolated worker controller and disposes it', async () => {
   let disposed = false, seen;

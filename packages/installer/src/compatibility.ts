@@ -1,5 +1,5 @@
 export const EXPORT_MARKER = "/* NEST-USERMOD-STREAM-EXPORT-v1 */";
-export const TOOLS_MARKER = "/* NEST-USERMOD-TOOLS-v1 */";
+export const TOOLS_MARKER = "/* NEST-USERMOD-TOOLS-v2 */";
 export const MULTISIDE_MARKER = "/* NEST-USERMOD-MULTISIDE */";
 export const STOCK_EXPORT_MARKER = "/* NEST-USERMOD-STOCK-EXPORT-v1 */";
 export const CUTTER_MARKER = "/* NEST-USERMOD-CUTTER-v2 */";
@@ -131,12 +131,28 @@ export function patchStreamExport(source: string, loaderPath: string): string {
 /** Use the same controller as the native UI: refreshes atoms, versions, slots and dependent projects. */
 export function patchTools(source: string): string {
   if (source.includes(TOOLS_MARKER)) return source;
+  if (source.includes("/* NEST-USERMOD-TOOLS-")) throw new Error("Stale native tool gateway; rebuild from the original archive");
   const anchor = "function getToolLibraryController(store) {";
   source = once(source, anchor, `function getToolLibraryController(store) {\n  ${TOOLS_MARKER}`);
   return once(source, "  return controller;\n}\n\nfunction useToolLibraryActions()", `  globalThis.__usermodTools = {
     async list() {
       await controller.refresh({ force: true });
       return controller.store.get(cutLibrarySettingsAtom).map(tool => ({ ...tool }));
+    },
+    async manage(action, args) {
+      await controller.refresh({ force: true });
+      const tools = controller.store.get(cutLibrarySettingsAtom);
+      const expected = args.expectedVersions;
+      if (!expected || tools.some(t => expected[t.id] !== t.version) || Object.keys(expected).length !== tools.length) throw new Error("Tool library changed; refresh list_tools and supply all expectedVersions.");
+      if (action === "delete") {
+        const tool = controller.findTool(args.toolId);
+        if (tool.slotNum !== null) throw new Error("Unassign the mounted tool before deleting it.");
+        return controller.deleteTool(args.toolId);
+      }
+      if (action === "assign") return controller.installTool(args.toolId, args.slotNum);
+      if (action === "unassign") return controller.uninstallTool(args.toolId);
+      if (action === "reorder") return controller.reorderSlots(args.toolIds.map(id => id === null ? null : controller.findTool(id)));
+      throw new Error("Unknown tool-library action.");
     },
     async save(tool, replace, expectedVersion) {
       await controller.refresh({ force: true });

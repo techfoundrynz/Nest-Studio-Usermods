@@ -7,10 +7,19 @@ import { z } from "zod";
 export type Dispatch = (action: string, args: Record<string, unknown>) => Promise<unknown>;
 const project = { projectId: z.string().min(1).max(200).describe("Exact project ID from list_projects; open its Prepare page first.") };
 export function createMcp(dispatch: Dispatch): McpServer {
-  const mcp = new McpServer({ name: "nest-studio", version: "0.2.0" });
+  const mcp = new McpServer({ name: "nest-studio", version: "0.3.0" });
   function tool(name: string, description: string, inputSchema: Record<string, z.ZodType>, readOnly = false): void {
     mcp.registerTool(name, { description, inputSchema, annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly, idempotentHint: readOnly, openWorldHint: false } }, async (args) => {
       try {
+        if ((name === "validate_programs" || name === "export_nc_file") && args.programId && !args.setupId) throw new Error("programId requires setupId");
+        if (name === "preview_toolpaths" && args.operationId && !args.modelId) throw new Error("operationId requires modelId");
+        if (name === "simplify_model" && args.stage === "preview" && args.percent === undefined) throw new Error("Simplification preview requires percent");
+        if (name === "manage_tool_slots") {
+          if (args.action === "reorder") {
+            const ids = args.toolIds as (string | null)[] | undefined;
+            if (!ids || new Set(ids.filter(id => id !== null)).size !== ids.filter(id => id !== null).length) throw new Error("Supply five slots with unique tool IDs");
+          } else if (!args.toolId || (args.action === "assign" && args.slotNum === undefined)) throw new Error("toolId and assign slotNum are required");
+        }
         const result = await dispatch(name, args);
         return { content: [{ type: "text" as const, text: JSON.stringify(result ?? null) }] };
       } catch (error) {
@@ -34,7 +43,8 @@ export function createMcp(dispatch: Dispatch): McpServer {
   tool("configure_stock", "Change native material type and square/round stock shape, or select a native fixture. Dimensions use Nest Studio's native width/length/thickness fields from get_project. 3-axis stock must be square; 4-axis requires fourth-axis fixture. Native adaptation/checks apply; read back the result.", { ...project, materialType: z.string().min(1).max(100).optional(), shape: z.enum(["square", "round"]).optional(), fixture: z.enum(["side-clamp-square", "plate-clamp", "side-clamp", "electric-vise", "low-profile-vise", "fourth-axis"]).optional() });
   const toolOverride = z.object({ toolId: z.string().min(1), spindleSpeed: z.number().positive().max(100000).optional(), freeRate: z.number().positive().max(100000).optional(), plungeRate: z.number().positive().max(100000).optional(), depthPerPass: z.number().positive().max(100).optional(), stepOver: z.number().positive().max(100).optional(), withdrawalDistance: z.number().nonnegative().max(100).optional() });
   const mode4 = z.object({ base: z.object({ enabled: z.boolean(), shape: z.enum(["box", "cylinder"]), length: z.number().positive().optional(), width: z.number().positive().optional(), height: z.number().positive().optional(), diameter: z.number().positive().optional() }), smartCutoff: z.object({ enabled: z.boolean(), remainingThickness: z.number().positive().optional() }) });
-  tool("configure_toolpath_plan", "Configure native planned smart-milling drafts before generation. Choose mounted tool IDs, feeds/speeds, carving mode, and 4-axis base/smart-cutoff settings. Does not modify tool-library geometry. Read get_cam_state after saving. Rotary mode dimensions/clearance are checked before generation.", { ...project, setupId: z.string().min(1).optional(), toolIds: z.array(z.string().min(1)).min(1).max(32).optional(), toolOverrides: z.array(toolOverride).max(32).optional(), carving: z.boolean().optional(), fourAxisMachiningMode: mode4.optional() });
+  const supportSetting = z.object({ checkTab: z.boolean().optional(), tabNum: z.number().int().min(1).max(100).optional(), tabLength: z.number().positive().max(1000).optional(), tabHigh: z.number().positive().max(100).optional(), checkReserveTab: z.boolean().optional(), reserveTabDepth: z.number().nonnegative().max(100).optional(), checkCutTab: z.boolean().optional(), cutTabDepth: z.number().positive().max(100).optional(), frontMachiningDepth: z.number().nonnegative().max(1000).optional(), backMachiningDepth: z.number().nonnegative().max(1000).optional() });
+  tool("configure_toolpath_plan", "Configure native smart-milling drafts: mounted tools, feeds/speeds, carving, 3-axis retaining tabs/reserve/cut depths, or rotary base/cutoff. Support changes apply to all faces of the selected model; omit setupId when changing supportSetting. Changing tab dimensions/count resets custom tab placement to automatic layout. Read get_cam_state afterwards.", { ...project, setupId: z.string().min(1).optional(), modelId: z.string().min(1).optional(), toolIds: z.array(z.string().min(1)).min(1).max(32).optional(), toolOverrides: z.array(toolOverride).max(32).optional(), carving: z.boolean().optional(), supportSetting: supportSetting.optional(), fourAxisMachiningMode: mode4.optional() });
   const identity = { ...project, setupId: z.string().min(1).max(200), modelId: z.string().min(1).max(200) };
   tool("begin_operation", "Open a native custom-operation editor for a 3-axis standard project. Choose contour, pocket, drilling, chamfer or thread; optional operationId edits an existing custom operation. Poll get_operation_editor until ready. Native rotary projects use smart relief/base/cutoff instead.", { ...identity, operationType: z.enum(["contour", "pocket", "drilling", "chamfer", "thread"]), operationId: z.string().min(1).max(200).optional() });
   tool("get_operation_editor", "Read the native operation-editor request, phase, configuration and available parameter fields.", project, true);
@@ -55,6 +65,27 @@ export function createMcp(dispatch: Dispatch): McpServer {
   tool("validate_gcode", "Run Nest Studio's native G-code validation without sending it to a machine.", { gcode: z.string().max(512 * 1024) }, true);
   tool("estimate_gcode_time", "Estimate G-code motion time using the native service without machine execution.", { gcode: z.string().max(512 * 1024) }, true);
   tool("list_jobs", "Read job history when the jobs mod is enabled; reports unavailable otherwise.", {}, true);
+  tool("open_project", "Open a native project ZIP from an absolute local path without a file picker (up to 64 MiB). Native duplicate-project and import checks apply.", { filePath: z.string().min(1).max(4096) });
+  tool("activate_project", "Switch to an existing project tab. Wait for its Prepare gateway before making project calls.", project);
+  tool("close_project", "Close a project using the native unsaved-changes prompt. Never silently discards work; returns closed or not_closed after the prompt.", project);
+  tool("save_project", "Save the active project through native persistence, dirty tracking and recent files. First save/saveAs may open a native destination dialog. Use save_project_copy for a dialog-free separate archive.", { ...project, saveAs: z.boolean().default(false) });
+  tool("list_programs", "List exportable generated program IDs by setup, with tools and operation IDs. Excludes ignored/non-exportable results; no G-code payload.", project, true);
+  const selection = { ...project, setupId: z.string().min(1).max(200).optional(), programId: z.string().min(1).max(200).optional() };
+  tool("validate_programs", "Validate complete native export content and estimate time by project/setup/program ID without the raw-text limit or machine execution. programId requires setupId. Validates native output before usermod export postprocessors.", selection, true);
+  tool("inspect_toolpaths", "Run native per-face material/overcut inspection and return reports without geometry buffers. Unsupported/incomplete reports are not a machining safety certificate. Does not start machining.", { ...project, setupId: z.string().min(1).max(200).optional(), retry: z.boolean().default(false) }, true);
+  tool("export_nc_file", "Export native G-code to a new absolute path without a picker; preserves rotary conversion and usermod export postprocessors. Choose .nc for one setup/program; whole multi-face projects require .zip. Refuses overwrites.", { ...selection, filePath: z.string().min(1).max(4096) });
+  tool("manage_tool_slots", "Change the app's tool-library magazine assignments or delete an unassigned tool. This updates software inventory only; it does not physically install a cutter. Supply expectedVersions for EVERY library tool from list_tools. reorder requires five distinct tool IDs/null entries.", { action: z.enum(["assign", "unassign", "reorder", "delete"]), toolId: z.string().min(1).max(200).optional(), slotNum: z.number().int().min(1).max(5).optional(), toolIds: z.array(z.string().min(1).max(200).nullable()).length(5).optional(), expectedVersions: z.record(z.string(), z.number().int().positive()) });
+  tool("preview_toolpaths", "Open native simulation preview for a generated setup or operation. operationId requires modelId. Preview navigation can leave Prepare; activate_project to return.", { ...project, setupId: z.string().min(1).max(200), modelId: z.string().min(1).max(200).optional(), operationId: z.string().min(1).max(200).optional() });
+  tool("set_operation_enabled", "Include/exclude a generated operation using the native ignored-operation controller and undo history. Excluded operations are omitted from native export/machining.", { ...identity, operationId: z.string().min(1).max(200), enabled: z.boolean() });
+  tool("set_operation_visibility", "Show/hide a generated operation in the native viewport. Visibility does not exclude an operation from export/machining; use set_operation_enabled for that.", { ...identity, operationId: z.string().min(1).max(200), visible: z.boolean() });
+  tool("set_work_origin", "Set native 3-axis work origin before generating toolpaths. Refuses changes while the native origin control is locked.", { ...project, origin: z.enum(["center", "bottomLeft"]) });
+  tool("get_model_analysis", "Read native feature/machinability analysis and its current running model. Missing/pending analysis is not a successful inspection.", project, true);
+  tool("get_model_edit_state", "Read native simplification session state and undo/redo availability.", project, true);
+  tool("scale_model", "Uniformly scale a model by a positive factor using native geometry editing and history, before toolpath generation. Changes part dimensions; inspect bounds afterwards.", { ...project, modelId: z.string().min(1).max(200), factor: z.number().positive().max(1000) });
+  tool("remove_model", "Remove a model through native removal, scene synchronization and undo history, before toolpath generation.", { ...project, modelId: z.string().min(1).max(200) });
+  tool("undo_repair", "Undo native mesh repair through the app's repair history, before generating toolpaths.", { ...project, modelId: z.string().min(1).max(200) });
+  tool("model_history", "Apply one native model undo/redo step; inspect project, geometry and toolpath validity afterwards.", { ...project, direction: z.enum(["undo", "redo"]) });
+  tool("simplify_model", "Native staged mesh simplification, when enabled: open, poll get_model_edit_state until sourceReady, preview percent (native reduction setting), poll until finished, then commit or cancel. Preview changes geometry; cancel restores the opening snapshot.", { ...project, modelId: z.string().min(1).max(200), stage: z.enum(["open", "preview", "commit", "cancel"]), percent: z.number().min(0).max(100).optional() });
   return mcp;
 }
 

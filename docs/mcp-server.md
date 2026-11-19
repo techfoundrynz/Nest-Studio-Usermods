@@ -3,6 +3,8 @@
 The `mcp-server` mod lets an MCP client interact with the running Nest Studio application. It uses the
 official TypeScript MCP SDK and stateless Streamable HTTP at `http://127.0.0.1:9641/mcp`.
 It runs inside Nest Studio; closing the app stops the endpoint. No separate server process is needed.
+MCP 0.3 exposes 53 tools. Its inspection, file, project-lifecycle and tool-slot gateways require a rebuilt
+loader archive; restarting only the plugin does not install those native adapters.
 
 ## Setup
 
@@ -69,6 +71,21 @@ shown in the panel. Disabling a main mod takes effect after restarting Nest Stud
 | `send_machine_command` | One exact text command, including G-code; requires a connected machine and a local approval dialog showing the command; rechecks the connection before sending |
 | `validate_gcode`, `estimate_gcode_time` | Native services without executing a program; validation supplies current mounted tool slots and their zero-padded aliases |
 | `list_jobs` | Job history when `jobs` is enabled; otherwise an explicit unavailable result |
+| `open_project` | Open a native project ZIP up to 64 MiB without a picker, retaining native import/duplicate-project decisions |
+| `activate_project`, `close_project` | Switch tabs or close with the native unsaved-work prompt; close reports `closed` or `not_closed` |
+| `save_project` | Native save, dirty tracking and recent-file update; first save or `saveAs` can require a destination dialog |
+| `list_programs` | Exportable setup/program IDs, tools and operation identities without G-code payloads |
+| `validate_programs` | Complete native export validation and time estimate by project, setup or program ID; no 512 KiB request limit |
+| `inspect_toolpaths` | Run native per-face inspection and return material/overcut risk reports, excluding geometry buffers |
+| `export_nc_file` | Native export to a new explicit path, including rotary conversion and enabled export postprocessors; `.nc`/`.gcode`/`.tap` for one file, `.zip` for multiple setups; refuses overwrites |
+| `manage_tool_slots` | Native software assignment/unassignment, five-slot reorder and unassigned-tool deletion, guarded by the complete library version snapshot |
+| `preview_toolpaths` | Open native setup/operation simulation preview; does not certify safety or control playback |
+| `set_operation_enabled` | Include/exclude a generated operation using native ignore state and undo history |
+| `set_operation_visibility` | Show/hide generated operation geometry; hidden operations remain included in export unless separately excluded |
+| `set_work_origin` | Native 3-axis center/bottom-left origin, before generated paths lock the control |
+| `get_model_analysis`, `get_model_edit_state` | Native feature-analysis state, simplification session and model undo/redo availability |
+| `scale_model`, `remove_model`, `undo_repair`, `model_history` | Native geometry/model edits and history; geometry edits require planning closed and no generated toolpaths |
+| `simplify_model` | Feature-gated native simplification: open, preview a reduction percentage, then commit or cancel; poll model-edit state between stages |
 
 Generation, stock changes, export and machining can return `workflow_requested`. They can open native dialogs
 and must not be interpreted as completed generation, saved files, or a running machine. Review the UI and
@@ -79,8 +96,38 @@ After `generate_toolpaths`, poll `get_cam_state` until `planned` is true, review
 
 ## Machining workflows
 
-Raw-text validation requests are limited to 512 KiB. Larger complete programs need Nest Studio's native
-G-code import/run validation; validating smaller fragments does not establish whole-program validity.
+Raw-text validation requests are limited to 512 KiB. For larger generated programs, use `list_programs`
+then `validate_programs` with `projectId`, optionally `setupId` and `programId`. A program ID requires its
+setup ID. The adapter streams complete native export content locally, including headers and rotary
+conversion, into native validation and time estimation. It does not truncate or split a program.
+Validation applies before usermod export postprocessors; it does not validate subsequent processor edits.
+Native export/review buffers are limited to 64 MiB per output. Smaller fragments do not establish
+whole-program validity. Inspection/validation failures remain errors, never a successful safety result.
+
+For a complete review, generate toolpaths, close planning, inspect `get_cam_state`, run
+`inspect_toolpaths`, then `validate_programs`. Review warnings and unsupported/incomplete inspection
+results. `export_nc_file` writes the native selected output and runs the same export postprocessor
+pipeline as the app, including each NC entry in multi-setup ZIPs. It never sends code to a machine.
+Use `setupId` to export one face; omit it for the whole project. Choose a new output filename each time.
+
+`configure_toolpath_plan.supportSetting` accepts retaining-tab count/length/height, reserve and tab-cut
+settings, and front/back machining depths. These require a 3-axis plan. Use `modelId` to target one model
+and omit `setupId` so support settings stay consistent across its faces. Native fixture depth and tab
+height limits are checked before any draft is saved. Changing tab count/dimensions resets existing custom
+placement to automatic layout; inspect the new drafts before generating. This does not expose a custom
+tab-position editor.
+
+Tool-slot changes update software inventory only. Agents must accurately describe physically installed
+cutters. Pass `expectedVersions: { "tool-id": version, ... }` for **every** tool returned by `list_tools`;
+a stale or incomplete snapshot is rejected. Reordering takes exactly five tool IDs/nulls. A mounted tool
+must be unassigned before deletion. No physical changer command is issued.
+
+For simplification, call `simplify_model` with `stage: "open"`, poll `get_model_edit_state` until
+`sourceReady`, request `stage: "preview"` with `percent`, and wait until `simplifying` is false. Inspect
+triangle counts and bounds before `stage: "commit"`; `stage: "cancel"` restores the opening geometry.
+The percentage is the native reduction setting. Geometry edits are reversible through native history.
+`preview_toolpaths` navigates to Preview; call `activate_project` and wait for Prepare before further
+project tools. Project close never bypasses the native save/discard/cancel decision.
 
 3-axis smart milling supports both faces and carving. Native custom contour, pocket, drilling, chamfer
 and thread operations use `begin_operation` with setup/model IDs. Poll `get_operation_editor` until
